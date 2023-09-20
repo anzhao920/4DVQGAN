@@ -180,7 +180,7 @@ class Encoder_z0_ODE_ConvGRU(nn.Module):
             yi = self.cell_list[0](input_tensor=xi,
                                    h_cur=yi_ode,
                                    mask=mask[:, i])
-            
+
             # return to iteration
             prev_input_tensor = yi
             prev_t, t_i = time_steps[i], time_steps[i - 1]
