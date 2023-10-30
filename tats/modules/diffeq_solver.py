@@ -13,7 +13,7 @@ from .utils import *
 from torch.distributions.multivariate_normal import MultivariateNormal
 
 # git clone https://github.com/rtqichen/torchdiffeq.git
-from torchdiffeq import odeint as odeint
+from torchdiffeq import odeint_adjoint as odeint
 
 #####################################################################################################
 

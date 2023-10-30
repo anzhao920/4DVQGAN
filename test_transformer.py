@@ -8,64 +8,55 @@ from tats import Net2NetTransformer, VideoData
 
 
 def main():
-    
+    pl.seed_everything(1234)
 
-    
     parser = argparse.ArgumentParser()
     parser = pl.Trainer.add_argparse_args(parser)
     parser = Net2NetTransformer.add_model_specific_args(parser)
     parser = VideoData.add_data_specific_args(parser)
     args = parser.parse_args()
-    args.random_seed = 1234
-    pl.seed_everything(args.random_seed)
+    
     # trainer args
     args.gpus = 1
     args.batch_size = 1
-    args.accumulate_grad_batches = 6
+    # args.accumulate_grad_batches = 6
     # args.progress_bar_refresh_rate= 500 
     args.max_steps=50000
-
-    args.log_every_n_steps=5
+    args.gradient_clip_val=1.0
+    # args.log_every_n_steps=5
 
     # Net2NetTransformer args
-    # args.vqvae = "./experiment6/lightning_logs/version_0/checkpoints/latest_checkpoint-v1.ckpt"
-    args.vqvae = "./experiment15/lightning_logs/version_0/checkpoints/epoch=173-step=15999-train/recon_loss=0.15.ckpt"
+    args.vqvae = "/cluster/project7/IPFMortalityPredictionNewloss/TATS-main/experiment6/lightning_logs/version_0/checkpoints/latest_checkpoint-v1.ckpt"
     args.unconditional = True
     args.longitudinal_CT_scans = True
-    args.default_root_dir='./transformer_experiment_1'
-    args.base_lr = 2e-04
+    args.default_root_dir='/cluster/project7/IPFMortalityPredictionNewloss/TATS-main/transformer_experiment_1'
+    args.base_lr = 4.5e-05
     args.vocab_size = 256
     args.first_stage_vocab_size=256
     args.block_size = 1537
-    
-    # transformer parameters
-    args.n_layer=6
-    args.n_head=8
-    args.n_embd=1024
+    args.n_layer=12
+    args.n_head=12
+    args.n_embd=768
     args.first_stage_key = 'longitudianl_CT_scans'
     args.batch_size_ode = 1536
-    args.scale = 1
+    args.scale = 4
+    args.timepoints = 40
     # vqgan parameters
     args.embedding_dim=16
     # args.sample_every_n_latent_frames=8
-    args.optimizer = 'Adam'
-    if args.optimizer != 'SAM':
-        args.gradient_clip_val=1.0
 
     #latentODE args
-    args.latents = 100
-    args.gen_layers = 3 #odernn n layers of ode encoder
-    args.units = 64
-    args.rec_dims = 100
-    args.rec_layers = 3 #odernn n layers of ode decoder
-    args.gru_units = 64
-    args.n_layers = 6 #vidode n layers of ode encoder and decoder
-    args.n_downs = 1
+    args.latents = 512
+    args.gen_layers = 8
+    args.units = 256
+    args.rec_dims = 512
+    args.rec_layers = 8
+    args.gru_units = 256
     # data args
     args.resolution = 256
     args.sequence_length=96
-    args.num_workers=0
-    args.data_root = 'C:/My Data/Leuven/'
+    args.num_workers=1
+    args.data_root = '/cluster/project7/IPFPrognosisPredictionNew/'
     args.img_path = 'Leuven_IPF_registered'
     args.mask_path ='Leuven_IPF_registered_mask'
     args.label_path = 'Leuven_data_label.csv'
@@ -73,17 +64,11 @@ def main():
     # args.external_img_path = 'CTscans' 
     # args.external_mask_path = 'Lungmasks'
     # args.external_label_path = 'MortalityDataSouthampton.csv'
-    args.external_data_root = 'C:/My Data/Leuven/'
+    args.external_data_root = '/cluster/project7/IPFPrognosisPredictionNew/'
     args.external_img_path = 'Leuven_IPF_registered'
     args.external_mask_path = 'Leuven_IPF_registered_mask'
     args.external_label_path = 'Leuven_data_label.csv'
-    args.max_longitudinal_CT=10
-    args.mode = 'reconstruction'
-    args.classification = False
-    args.ode_rnn = False
-    args.time_window_max = 365.25*7
-    args.timepoints = round(args.time_window_max/90)+1
-    args.downsample_latent = False
+    args.max_longitudinal_CT=3
     data = VideoData(args)
     # pre-make relevant cached files if necessary
     data.train_dataloader()
@@ -96,8 +81,7 @@ def main():
     callbacks.append(GPUStatsMonitor() )
     callbacks.append(ModelCheckpoint(every_n_train_steps=1000, save_top_k=-1, filename='{epoch}-{step}-{train/loss:.2f}'))
     callbacks.append(ModelCheckpoint(every_n_train_steps=5000, save_top_k=-1, filename='{epoch}-{step}-{train/loss:.2f}'))
-    callbacks.append(ModelCheckpoint(monitor='val/loss', mode='min', save_top_k=3, filename='best_checkpoint_val_loss'))
-    callbacks.append(ModelCheckpoint(monitor='train/loss', mode='min', save_top_k=3, filename='best_checkpoint_train_loss'))
+    callbacks.append(ModelCheckpoint(monitor='val/loss', mode='min', save_top_k=3, filename='best_checkpoint'))
 
     kwargs = dict()
     if args.gpus > 1:
@@ -115,7 +99,7 @@ def main():
     print("Setting learning rate to {:.2e} = {} (accumulate_grad_batches) * {} (num_gpus) * {} (batchsize) * {:.2e} (base_lr)".format(
         model.learning_rate, accumulate_grad_batches, ngpu, bs, base_lr))
 
-    # load the most recent checkpoint file
+    # # load the most recent checkpoint file
     # base_dir = os.path.join(args.default_root_dir, 'lightning_logs')
     # if os.path.exists(base_dir):
     #     log_folder = ckpt_file = ''
@@ -137,11 +121,12 @@ def main():
 
     trainer = pl.Trainer.from_argparse_args(args, callbacks=callbacks,
                                             max_steps=args.max_steps,**kwargs)
-    print(trainer.logger.log_dir)
-    trainer.fit(model, data)
-    # model = Net2NetTransformer.load_from_checkpoint("./transformer_experiment_1/lightning_logs/best_checkpoint.ckpt",args=args)
-    # model.eval()
-    # predictions = trainer.predict(model, data)
+
+    # trainer.fit(model, data)
+    model = Net2NetTransformer.load_from_checkpoint("/cluster/project7/IPFMortalityPredictionNewloss/TATS-main/transformer_experiment_1/lightning_logs/version_4/checkpoints/epoch=285-step=49999-train/loss=0.01.ckpt",args=args)
+    model.eval()
+    predictions = trainer.predict(model, data)    
+
 
 if __name__ == '__main__':
     main()

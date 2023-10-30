@@ -761,19 +761,24 @@ class IPFLongitudinalCTDataset(data.Dataset):
     def __init__(self, root_dir, img_path, mask_path, label_path,args,patients,spatial_transforms=None, max_longitudinal_CT=2):
         labels = pd.read_csv(root_dir+label_path)
         self.mode = args.mode
-        labels = labels[labels.time_from_baseline<(365.25*4)]
+
+        labels = labels[labels.time_from_baseline<args.time_window_max]
         self.labels = labels
         self.patient_IDs = []
         if self.mode == 'interpolation':
             for patient in patients:
                 patient_img_path_list = self.labels[self.labels.patient_id==patient]['image_path'].to_numpy()
-                if len(patient_img_path_list)>1:
+                if len(patient_img_path_list)>2:
                     self.patient_IDs.append(patient)
         elif self.mode == 'extrapolation':
             for patient in patients:
                 patient_img_path_list = self.labels[self.labels.patient_id==patient]['image_path'].to_numpy()
                 if len(patient_img_path_list)>2:
                     self.patient_IDs.append(patient)
+        elif self.mode == 'reconstruction':
+            for patient in patients:
+                patient_img_path_list = self.labels[self.labels.patient_id==patient]['image_path'].to_numpy()
+                self.patient_IDs.append(patient)        
 
         # labels = labels.set_index('CTCode')
         # labels = labels.loc[self.ID_list,['Dead','Follow-up Time','top_lung_location','bottom_lung_location']]
@@ -856,7 +861,7 @@ class IPFLongitudinalCTDataset(data.Dataset):
         else:
             patient_observed_time_points[0:len(patient_observed_time_points_temp)]=patient_observed_time_points_temp
         for i in range(len(patient_img_path_list)):
-            processed_CT,processed_mask,_,_ = self.preprosessing_CT(patient_img_path_list[i],patient_mask_path)
+            processed_CT,processed_mask = self.preprosessing_CT(patient_img_path_list[i],patient_mask_path)
             processed_CTs[i,:]=processed_CT
         return {'longitudianl_CT_scans':processed_CTs,'longitudianl_lung_masks':processed_mask,'observed_time_points':patient_observed_time_points,'patientID':patient}
 
@@ -910,7 +915,7 @@ class IPFLongitudinalCTDataset(data.Dataset):
         output_mask = mask_transformed
         img_transformed = img_transformed-0.5
         # print(idx)
-        return img_transformed, output_mask, Dead, followUpTime
+        return img_transformed, output_mask
              
 
     def __resize_data__(self, data, targetSize):

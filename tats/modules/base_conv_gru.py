@@ -70,7 +70,7 @@ class ConvGRUCell(nn.Module):
 class Encoder_z0_ODE_ConvGRU(nn.Module):
     
     def __init__(self, input_size, input_dim, hidden_dim, kernel_size, num_layers, dtype, batch_first=False,
-                 bias=True, return_all_layers=False, z0_diffeq_solver=None, run_backwards=None):
+                 bias=True, return_all_layers=False, z0_diffeq_solver=None, run_backwards=None,ode_rnn=False):
         
         super(Encoder_z0_ODE_ConvGRU, self).__init__()
         
@@ -91,6 +91,7 @@ class Encoder_z0_ODE_ConvGRU(nn.Module):
         self.return_all_layers = return_all_layers
         self.z0_diffeq_solver = z0_diffeq_solver
         self.run_backwards = run_backwards
+        self.ode_rnn = ode_rnn
         
         ##### By product for visualization
         self.by_product = {}
@@ -140,55 +141,66 @@ class Encoder_z0_ODE_ConvGRU(nn.Module):
     
     def run_ode_conv_gru(self, input_tensor, mask, time_steps, run_backwards=True, tracker=None):
         
-        b, t, c, h, w, d = input_tensor.size()
+        b, t, c, d, h, w  = input_tensor.size()
         
         device = get_device(input_tensor)
         # time_steps = time_steps[mask.bool()[:,:,0]]
         # Set initial inputs
-        prev_input_tensor = torch.zeros((b, c, h, w, d)).to(device)
-        
-        # Time configuration
-        # Run ODE backwards and combine the y(t) estimates using gating
-        prev_t, t_i = time_steps[-1] + 0.01, time_steps[-1]
-        latent_ys = []
-        
-        time_points_iter = range(0, time_steps.size(-1))
-        if run_backwards:
-            time_points_iter = reversed(time_points_iter)
-        
-        for idx, i in enumerate(time_points_iter):
-    
-            inc = self.z0_diffeq_solver.ode_func(prev_t, prev_input_tensor) * (t_i - prev_t)
-            assert (not torch.isnan(inc).any())
-            tracker.write_info(key=f"inc{idx}", value=inc.clone().cpu())
+        for batch_idx in range(0,b):
+            # hidden state
+            prev_input_tensor = torch.zeros((1, c, d, h, w)).to(device)
             
-            ode_sol = prev_input_tensor + inc
-            tracker.write_info(key=f"prev_input_tensor{idx}", value=prev_input_tensor.clone().cpu())
-            tracker.write_info(key=f"ode_sol{idx}", value=ode_sol.clone().cpu())
-            ode_sol = torch.stack((prev_input_tensor, ode_sol), dim=1)  # [1, b, 2, c, h, w] => [b, 2, c, h, w]
-            assert (not torch.isnan(ode_sol).any())
+            # Time configuration
+            # Run ODE backwards and combine the y(t) estimates using gating
+            pos = torch.where(mask[batch_idx,:,:]==1)[0][-1]+1
+            batch_time_steps = time_steps[0:pos]
+            batch_mask = mask[batch_idx:(batch_idx+1),0:pos,:]
+            prev_t, t_i = batch_time_steps[-1] + 0.01, batch_time_steps[-1]
+            latent_ys = []
+            yi_allbatch = []
             
-            if torch.mean(ode_sol[:, 0, :] - prev_input_tensor) >= 0.001:
-                print("Error: first point of the ODE is not equal to initial value")
-                print(torch.mean(ode_sol[:, :, 0, :] - prev_input_tensor))
-                exit()
+            time_points_iter = range(0, batch_time_steps.size(-1))
+            if run_backwards:
+                time_points_iter = reversed(time_points_iter)
             
-            yi_ode = ode_sol[:, -1, :]
-            xi = input_tensor[:, i, :]
-            
-            # only 1 now
-            yi = self.cell_list[0](input_tensor=xi,
-                                   h_cur=yi_ode,
-                                   mask=mask[:, i])
+            for idx, i in enumerate(time_points_iter):
+                if self.ode_rnn:
+                    inc = self.z0_diffeq_solver.ode_func(prev_t, prev_input_tensor) * (t_i - prev_t)
+                    assert (not torch.isnan(inc).any())
+                    tracker.write_info(key=f"inc{idx}", value=inc.clone().cpu())
+                    
+                    ode_sol = prev_input_tensor + inc
+                else:
+                    ode_sol = prev_input_tensor
+                tracker.write_info(key=f"prev_input_tensor{idx}", value=prev_input_tensor.clone().cpu())
+                tracker.write_info(key=f"ode_sol{idx}", value=ode_sol.clone().cpu())
+                ode_sol = torch.stack((prev_input_tensor, ode_sol), dim=1)  # [1, b, 2, c, h, w] => [b, 2, c, h, w]
+                assert (not torch.isnan(ode_sol).any())
+                
+                if torch.mean(ode_sol[:, 0, :] - prev_input_tensor) >= 0.001:
+                    print("Error: first point of the ODE is not equal to initial value")
+                    print(torch.mean(ode_sol[:, :, 0, :] - prev_input_tensor))
+                    exit()
+                
+                yi_ode = ode_sol[:, -1, :]
+                xi = input_tensor[:, i, :]
+                
+                # only 1 now
+                yi = self.cell_list[0](input_tensor=xi,
+                                    h_cur=yi_ode,
+                                    mask=batch_mask[:, i])
 
-            # return to iteration
-            prev_input_tensor = yi
-            prev_t, t_i = time_steps[i], time_steps[i - 1]
-            latent_ys.append(yi)
+                # return to iteration
+                prev_input_tensor = yi
+                prev_t, t_i = batch_time_steps[i], batch_time_steps[i - 1]
+            yi_allbatch.append(yi)
+        yi_allbatch = torch.cat(yi_allbatch, 0)
+                # latent_ys.append(yi)
+            # latent_ys is not used
+            # latent_ys = torch.stack(latent_ys, 1)
+        # latent_ys = torch.stack(latent_ys, 1)
         
-        latent_ys = torch.stack(latent_ys, 1)
-        
-        return yi, latent_ys
+        return yi_allbatch, latent_ys
     
     def _init_hidden(self, batch_size):
         init_states = []
@@ -210,7 +222,7 @@ class Encoder_z0_ODE_ConvGRU(nn.Module):
 
 
 def get_norm_layer(ch):
-    norm_layer = nn.BatchNorm2d(ch)
+    norm_layer = nn.BatchNorm3d(ch)
     return norm_layer
 
 
@@ -246,7 +258,7 @@ class Decoder(nn.Module):
         
         ch = input_dim
         for i in range(n_ups):
-            model += [nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)]
+            model += [nn.Upsample(scale_factor=2, mode='trilinear', align_corners=False)]
             model += [nn.Conv3d(ch, ch // 2, 3, 1, 1)]
             model += [get_norm_layer(ch // 2)]
             model += [nn.ReLU()]
