@@ -5,7 +5,7 @@ import argparse
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint,GPUStatsMonitor
 from tats import Net2NetTransformer, VideoData
-
+import numpy as np
 
 def main():
     
@@ -29,7 +29,7 @@ def main():
 
     # Net2NetTransformer args
     # args.vqvae = "./experiment6/lightning_logs/version_0/checkpoints/latest_checkpoint-v1.ckpt"
-    args.vqvae = "./experiment15/lightning_logs/version_0/checkpoints/epoch=173-step=15999-train/recon_loss=0.15.ckpt"
+    args.vqvae = "./experiment15/lightning_logs/version_0/checkpoints/epoch=195-step=17999-train/recon_loss=0.11.ckpt"
     args.unconditional = True
     args.longitudinal_CT_scans = True
     args.default_root_dir='./transformer_experiment_1'
@@ -60,7 +60,7 @@ def main():
     args.rec_layers = 3 #odernn n layers of ode decoder
     args.gru_units = 64
     args.n_layers = 6 #vidode n layers of ode encoder and decoder
-    args.n_downs = 1
+    args.n_downs = 0
     # data args
     args.resolution = 256
     args.sequence_length=96
@@ -79,11 +79,13 @@ def main():
     args.external_label_path = 'Leuven_data_label.csv'
     args.max_longitudinal_CT=10
     args.mode = 'reconstruction'
-    args.classification = False
+    args.classification = True
+    args.residual = True
     args.ode_rnn = False
-    args.time_window_max = 365.25*7
+    args.time_window_max = 365.25*6
     args.timepoints = round(args.time_window_max/90)+1
     args.downsample_latent = False
+    args.flowmap = False
     data = VideoData(args)
     # pre-make relevant cached files if necessary
     data.train_dataloader()
@@ -137,11 +139,22 @@ def main():
 
     trainer = pl.Trainer.from_argparse_args(args, callbacks=callbacks,
                                             max_steps=args.max_steps,**kwargs)
-    print(trainer.logger.log_dir)
+    # print(trainer.logger.log_dir)
     trainer.fit(model, data)
-    # model = Net2NetTransformer.load_from_checkpoint("./transformer_experiment_1/lightning_logs/best_checkpoint.ckpt",args=args)
-    # model.eval()
-    # predictions = trainer.predict(model, data)
+    '''
+    model_path = "./transformer_experiment_1/lightning_logs/best_checkpoint_train_loss.ckpt"
+    model = Net2NetTransformer.load_from_checkpoint(model_path,args=args)
+    model.eval()
+    trainer.test(model, data)
+    pixelNum_sum = np.stack(model.pixelNum_sum_list).sum()
+    print('model_path: ',model_path)
+    print('test mode: ',args.mode)
+    print('acc1_mean: ',np.stack(model.acc1_sum_list).sum()/pixelNum_sum)
+    print('acc5_mean: ',np.stack(model.acc5_sum_list).sum()/pixelNum_sum)
+    print('ssim_mean: ',np.stack(model.ssim_sum_list).sum()/pixelNum_sum)
+    print('psnr_mean: ',np.stack(model.psnr_sum_list).sum()/pixelNum_sum)
+    print('mse_mean: ',np.stack(model.mse_sum_list).sum()/pixelNum_sum)
+    '''
 
 if __name__ == '__main__':
     main()

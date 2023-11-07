@@ -263,7 +263,11 @@ class Decoder(nn.Module):
             model += [get_norm_layer(ch // 2)]
             model += [nn.ReLU()]
             ch = ch // 2
-        
+
+        # model += [nn.Conv3d(ch, ch // 2, 3, 1, 1)]
+        # model += [get_norm_layer(ch // 2)]
+        # model += [nn.ReLU()]
+        # ch = ch // 2        
         model += [nn.Conv3d(ch, output_dim, 3, 1, 1)]
         # model += [nn.Tanh()]
         
