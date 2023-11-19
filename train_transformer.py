@@ -78,14 +78,14 @@ def main():
     args.external_mask_path = 'Leuven_IPF_registered_mask'
     args.external_label_path = 'Leuven_data_label.csv'
     args.max_longitudinal_CT=10
-    args.mode = 'reconstruction'
+    args.mode = 'extrapolation'
     args.classification = True
-    args.residual = True
+    args.residual = False
     args.ode_rnn = False
     args.time_window_max = 365.25*6
     args.timepoints = round(args.time_window_max/90)+1
     args.downsample_latent = False
-    args.flowmap = False
+    args.flowmap = True
     data = VideoData(args)
     # pre-make relevant cached files if necessary
     data.train_dataloader()

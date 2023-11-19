@@ -174,7 +174,7 @@ class VidODE(nn.Module):
             index_selected = (truth_time_steps*self.args.timepoints).long()
             sol_y = sol_y_all[0:sol_y_all.shape[0],index_selected,:]
             # regular b, t, 6, h, w / irregular b, t * ratio, 6, h, w
-            pred_outputs = self.get_flowmaps_new(sol_out=sol_y, first_prev_embed=skip_conn_embed) # b, t, 6, h, w
+            pred_outputs = self.get_flowmaps_new(sol_out=sol_y, first_prev_embed=skip_conn_embed,mask = out_mask) # b, t, 6, h, w
             pred_outputs = torch.cat(pred_outputs, dim=1)
             pred_flows, pred_intermediates, pred_masks = \
                 pred_outputs[:, :, 0:3, ...],pred_outputs[:, :, 3:(3+self.input_dim), ...], torch.sigmoid(pred_outputs[:, :, (3+self.input_dim):, ...])
@@ -206,7 +206,8 @@ class VidODE(nn.Module):
                 pred_x = pred_masks * warped_pred_x + (1 - pred_masks) * pred_intermediates
             else:
                 pred_x = warped_pred_x + pred_intermediates
-            pred_x = pred_x[out_mask.squeeze(-1).bool(),:]
+            # pred_x = pred_x[out_mask.squeeze(-1).bool(),:]
+            pred_x = pred_x[out_mask[out_mask.bool()].view(b,-1).bool(),:]
         if self.args.classification:
             pred_x = self.classifier(pred_x)
             
@@ -306,7 +307,7 @@ class VidODE(nn.Module):
     
         return pred_flows
         
-    def get_flowmaps_new(self, sol_out, first_prev_embed):
+    def get_flowmaps_new(self, sol_out, first_prev_embed, mask):
         """ Get flowmaps recursively
         Input:
             sol_out - Latents from ODE decoder solver (b, time_steps_to_predict, c, h, w)
@@ -315,14 +316,15 @@ class VidODE(nn.Module):
         Output:
             pred_flows - List of predicted flowmaps (b, time_steps_to_predict, c, h, w)
         """
-        b, pred_time_steps, c, d, h, w = sol_out.size()
+        b, _, c, d, h, w = sol_out.size()
+        pred_time_steps = int(mask[0].sum())
         pred_flows = list()
     
         prev = first_prev_embed.clone()
         time_iter = range(pred_time_steps)
         
-        # if mask.size(1) == sol_out.size(1):
-        #     sol_out = sol_out[mask.squeeze(-1).byte()].view(b, pred_time_steps, c, h, w)
+        if mask.size(1) == sol_out.size(1):
+            sol_out = sol_out[mask.squeeze(-1).bool()].view(b, pred_time_steps, c, d, h, w)
         
         for t in time_iter:
             cur_and_prev = torch.cat([sol_out[:, t, ...], prev], dim=1)

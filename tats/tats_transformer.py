@@ -575,7 +575,7 @@ class Net2NetTransformer(pl.LightningModule):
                         niis = np.flip(niis,axis=0)
                         mode = self.args.mode
                         image_type = 'predicted'
-                        self.save_nii(self.logger.save_dir, mode,image_type,niis,
+                        self.save_nii(self.logger.log_dir, mode,image_type,niis,
                             patient_IDs[0], i)
 
                         niis = input_CTs[i,:]
@@ -585,7 +585,7 @@ class Net2NetTransformer(pl.LightningModule):
                         niis = np.flip(niis,axis=0)
                         mode = self.args.mode
                         image_type = 'target'
-                        self.save_nii(self.logger.save_dir, mode,image_type,niis,
+                        self.save_nii(self.logger.log_dir, mode,image_type,niis,
                             patient_IDs[0], i)                
         '''
                     # ms_ssim_sum = ms_ssim_sum+ms_ssim(padding(reconstructed_CTs[i:i+1].unsqueeze(0)), padding(input_CTs[i:i+1].unsqueeze(0)), data_range=1, size_average=False) 
