@@ -78,7 +78,7 @@ def main():
     args.mode = 'reconstruction'
     args.classification = False
     args.ode_rnn = False
-    args.time_window_max = 365.25*6
+    args.time_window_max = 365.25*4
     args.timepoints = round(args.time_window_max/90)+1
     args.downsample_latent = False
     args.ode_n_unit = 128

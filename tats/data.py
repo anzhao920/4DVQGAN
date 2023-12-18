@@ -775,7 +775,7 @@ class IPFLongitudinalCTDataset(data.Dataset):
                 patient_img_path_list = self.labels[self.labels.patient_id==patient]['image_path'].to_numpy()
                 if len(patient_img_path_list)>2:
                     self.patient_IDs.append(patient)
-        elif self.mode == 'reconstruction':
+        elif self.mode == 'reconstruction' or self.mode=='one-year':
             for patient in patients:
                 patient_img_path_list = self.labels[self.labels.patient_id==patient]['image_path'].to_numpy()
                 self.patient_IDs.append(patient)        

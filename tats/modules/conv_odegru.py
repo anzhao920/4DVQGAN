@@ -18,7 +18,7 @@ class VidODE(nn.Module):
         self.input_dim=input_dim
         self.args.n_layers = args.n_layers
         self.args.n_downs = args.n_downs
-        self.args.run_backwards = True
+        # self.args.run_backwards = False
         self.args.dec_diff = 'dopri5'
         self.args.flowmap = args.flowmap
         self.args.ode_rnn = args.ode_rnn 
@@ -77,7 +77,7 @@ class VidODE(nn.Module):
                                                 input_dim=base_dim,
                                                 hidden_dim=base_dim,
                                                 kernel_size=(3, 3, 3),
-                                                num_layers=3,
+                                                num_layers=1,
                                                 dtype=torch.cuda.FloatTensor if self.device == 'cuda' else torch.FloatTensor,
                                                 batch_first=True,
                                                 bias=True,
@@ -118,7 +118,12 @@ class VidODE(nn.Module):
             self.decoder = Decoder(input_dim=base_dim*2, output_dim=self.input_dim*2 + 3, n_ups=self.args.n_downs).to(self.device)
             if self.args.classification :
                 self.classifier = nn.Conv3d(self.input_dim, self.args.vocab_size, 3, 1, 1)
-            
+
+    def test_gpu(self,loc):
+        print(torch.cuda.get_device_name(0))
+        print('Memory Usage at loc:',loc)
+        print('Allocated:', round(torch.cuda.memory_allocated(0)/1024**3,1), 'GB')
+        print('Cached:   ', round(torch.cuda.memory_reserved(0)/1024**3,1), 'GB')             
     def get_reconstruction(self, time_steps_to_predict, truth, truth_time_steps, mask=None, out_mask=None):
         
         truth = truth.to(self.device)
@@ -135,7 +140,8 @@ class VidODE(nn.Module):
         skip_image=[]
         for batch_idx in range(0,b):
             pos = torch.where(mask[batch_idx,:,:]==1)[0][-1]
-            skip_image.append(truth[batch_idx:(batch_idx+1), pos, ...]) if self.args.mode == 'extrapolation' else skip_image.append(truth[batch_idx:(batch_idx+1), 0, ...])
+            # skip_image.append(truth[batch_idx:(batch_idx+1), pos, ...]) if self.args.mode == 'extrapolation' else skip_image.append(truth[batch_idx:(batch_idx+1), 0, ...])
+            skip_image.append(truth[batch_idx:(batch_idx+1), 0, ...])
         skip_image = torch.cat(skip_image,dim=0)
         skip_conn_embed = skip_image 
         # skip_conn_embed = self.encoder(skip_image).view(b, -1, d//resize, h // resize, w // resize)
@@ -174,7 +180,8 @@ class VidODE(nn.Module):
             index_selected = (truth_time_steps*self.args.timepoints).long()
             sol_y = sol_y_all[0:sol_y_all.shape[0],index_selected,:]
             # regular b, t, 6, h, w / irregular b, t * ratio, 6, h, w
-            pred_outputs = self.get_flowmaps_new(sol_out=sol_y, first_prev_embed=skip_conn_embed,mask = out_mask) # b, t, 6, h, w
+            # pred_outputs = self.get_flowmaps_new(sol_out=sol_y, first_prev_embed=skip_conn_embed,mask = out_mask) # b, t, 6, h, w
+            pred_outputs = self.get_flowmaps_new(sol_out=sol_y, first_prev_embed=skip_conn_embed,mask = mask) # b, t, 6, h, w
             pred_outputs = torch.cat(pred_outputs, dim=1)
             pred_flows, pred_intermediates, pred_masks = \
                 pred_outputs[:, :, 0:3, ...],pred_outputs[:, :, 3:(3+self.input_dim), ...], torch.sigmoid(pred_outputs[:, :, (3+self.input_dim):, ...])
@@ -200,20 +207,36 @@ class VidODE(nn.Module):
             # # Warping
             # # last_frame = truth[:, -1, ...] if self.opt.extrap else truth[:, 0, ...]
             last_frame = skip_image.clone()
-            warped_pred_x = self.get_warped_images_new(pred_flows=pred_flows, start_image=last_frame, grid=grid,residual = self.args.residual)
-            warped_pred_x = torch.cat(warped_pred_x, dim=1)  # regular b, t, 6, h, w / irregular b, t * ratio, 6, h, w
+
             if not self.args.residual:
+                warped_pred_x = self.get_warped_images_new(pred_flows=pred_flows, start_image=last_frame, grid=grid,residual = self.args.residual)
+                warped_pred_x = torch.cat(warped_pred_x, dim=1)  # regular b, t, 6, h, w / irregular b, t * ratio, 6, h, w
                 pred_x = pred_masks * warped_pred_x + (1 - pred_masks) * pred_intermediates
             else:
-                pred_x = warped_pred_x + pred_intermediates
-            # pred_x = pred_x[out_mask.squeeze(-1).bool(),:]
-            pred_x = pred_x[out_mask[out_mask.bool()].view(b,-1).bool(),:]
+                pred_x = pred_intermediates.clone()
+                true_intermediates = pred_intermediates.clone()
+                truth = torch.cat([last_frame.unsqueeze(0),truth],dim=1)
+                for i in range(0,pred_intermediates.shape[1]):
+                    pred_x[:,i,:] = last_frame + torch.sum(pred_intermediates[:,0:(i+1),:],dim=1)
+                    true_intermediates[:,i,:] = truth[:,i+1,:]-truth[:,i,:]
+                    # if i==0:
+                    #     true_intermediates[:,i,:]=0
+                    # else:
+                    #     true_intermediates[:,i,:] = truth[:,i,:]-truth[:,i-1,:]
+
+            pred_x = pred_x[out_mask.squeeze(-1).bool(),:]
+            true_intermediates = true_intermediates[out_mask.squeeze(-1).bool(),:]
+            pred_intermediates = pred_intermediates[out_mask.squeeze(-1).bool(),:]
+            # pred_x = pred_x[out_mask[out_mask.bool()].view(b,-1).bool(),:]
+            # true_intermediates = true_intermediates[out_mask[out_mask.bool()].view(b,-1).bool(),:]
+            # pred_intermediates = pred_intermediates[out_mask[out_mask.bool()].view(b,-1).bool(),:]
+
         if self.args.classification:
             pred_x = self.classifier(pred_x)
             
             # pred_x = pred_x.view(b, -1, c, d, h, w)
-
-        return pred_x
+        # truth[0,]
+        return pred_x,index_selected,true_intermediates.detach(),pred_intermediates
         # else:
         #     # not ready yet
         #     ##### Conv decoding
@@ -400,7 +423,7 @@ class VidODE(nn.Module):
         batch_dict["data_to_predict"] = batch_dict["data_to_predict"].to(self.device)
         batch_dict["mask_predicted_data"] = batch_dict["mask_predicted_data"].to(self.device)
 
-        sol_y = self.get_reconstruction(
+        sol_y, index_selected,true_intermediates,pred_intermediates= self.get_reconstruction(
             time_steps_to_predict=batch_dict["tp_to_predict"],
             truth=batch_dict["observed_data"],
             truth_time_steps=batch_dict["observed_tp"],
@@ -427,4 +450,4 @@ class VidODE(nn.Module):
         # results["pred_y"] = pred_x
 
         
-        return sol_y
+        return sol_y,index_selected,true_intermediates,pred_intermediates
