@@ -1089,6 +1089,9 @@ class Net2NetTransformer(pl.LightningModule):
             observed_data[~(observed_mask.squeeze(-1).bool()),:]=0  
             for i in range(2,observed_data.shape[1]):
                 observed_data[0,i,:]= observed_data[0,1,:]+(observed_data[0,1,:]-observed_data[0,0,:])/time_steps[1]*(time_steps[i]-time_steps[1])
+            observed_data = rearrange(observed_data,'b t c d h w -> (b t) c d h w')
+            observed_data = self.first_stage_model.codebook(observed_data)['embeddings']
+            observed_data = rearrange(observed_data,'(b t) c d h w -> b t c d h w',b=observed_time_mask.shape[0])
 
             for b in range(0,observed_time_mask.shape[0]):
                 observed_data[b,:,:,~(latent_mask[b,0,:].bool())] = 0
