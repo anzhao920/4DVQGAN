@@ -177,279 +177,8 @@ class Net2NetTransformer(pl.LightningModule):
         else:
             ValueError('conditional model %s is not implementated'%self.cond_stage_key)
 
-    # def forward(self, x, c, batch_idx,time_points=None, lung_masks=None, cbox=None,save_nii=False,all_time_points = False,patient_IDs=None):
-    #     # # one step to produce the logits
-    #     # if x.size()[1]>1:
-    #     #     x = rearrange(x,'b c h w d -> (b c) h w d') 
-    #     #     x = x[:,None]
-    #     # if time_points is not None:
-    #     #     time_points = rearrange(time_points,'b t -> (b t)')
-    #     #     observed_mask = ~torch.isnan(time_points)
-    #     logits_list = []
-    #     logits_masked_list = []
-    #     targets_list = []
-    #     targets_masked_list=[]
-    #     time_points_list = []
-    #     time_points_list_all = []
-    #     for idx in range(x.size()[0]):
-    #         temp = x[idx,:]
-    #         temp = temp[:,None]
-    #         vq_embeddings, z_indices = self.encode_to_z(temp)  
-    #         lung_masks_idx = lung_masks[idx,:]
-    #         lung_masks_idx = lung_masks_idx[:,None]
-    #         # size_vq = vq_embeddings.size()
-    #         # size_vq[0]=x.size()[0]
-    #         # size_zindex = z_indices.size()
-    #         # size_zindex[0]=x.size()[0]
-    #         # vq_embeddings_latentODE = torch.zeros(size_vq)
-    #         # z_indices_latentODE = torch.zeros(size_zindex)
-    #         # vq_embeddings_latentODE[]
-    #         # _, c_indices = self.encode_to_c(c)
-    #         z_indices = z_indices + self.cond_stage_vocab_size
 
-    #         if self.training and self.pkeep < 1.0:
-    #             mask = torch.bernoulli(self.pkeep*torch.ones(z_indices.shape,
-    #                                                         device=z_indices.device))
-    #             mask = mask.round().to(dtype=torch.int64)
-    #             r_indices = torch.randint_like(z_indices, self.transformer.config.vocab_size)
-    #             a_indices = mask*z_indices+(1-mask)*r_indices
-    #         else:
-    #             a_indices = z_indices
-
-    #         # cz_indices = torch.cat((c_indices, a_indices), dim=1)
-    #         # target includes all sequence elements (no need to handle first one
-    #         # differently because we are conditioning)
-
-    #         z_indices=rearrange(z_indices,'t c h w -> t (c h w)')
-    #         observed_time_mask = ~torch.isnan(time_points[idx])
-    #         z_indices = z_indices[observed_time_mask,:]  
-    #         # print("the number of time points is:")
-    #         # print(z_indices.shape[0])  
-    #         time_points_list.append(time_points[idx,observed_time_mask])        
-    #         targets_list.append(z_indices)
-    #         b,c1,h1,w1,d = vq_embeddings.size()
-    #         # latent_mask = torch.nn.functional.interpolate(lung_masks_idx,size=(int(c1/self.scale),int(h1/self.scale),int(w1/self.scale)),mode='trilinear',align_corners=False)
-    #         latent_mask = torch.nn.functional.interpolate(lung_masks_idx,size=(int(c1/self.scale),int(h1/self.scale),int(w1/self.scale)),mode='trilinear',align_corners=False)
-    #         latent_mask[latent_mask>0]=1
-    #         latent_mask = rearrange(latent_mask,'b t c h w->b t (c h w)')
-    #         data_object_list = self.latent_ODE_data_object(vq_embeddings,latent_mask.bool(),time_points[idx],self.scale,self.batch_size_ode)
-    #         sol_y_list = []
-            
-    #         for i in range(len(data_object_list)):
-    #             sol_y,sol_y_all = self.latentODE_model.compute_all_losses(data_object_list[i],n_traj_samples=1)
-    #             if all_time_points:
-    #                 sol_y_list.append(sol_y_all.mean(dim=0))
-    #             else:
-    #                 sol_y_list.append(sol_y.mean(dim=0))
-    #             # sol_y=data_object_list[i]['data_to_predict']#temp
-    #             # sol_y_list.append(sol_y)#temp
-
-    #         data_transformer = torch.cat(sol_y_list)
-    #         data_transformer = rearrange(data_transformer,'l t d->t l d')
-
-    #         # classtoken_mask =  torch.zeros(latent_mask.shape[0],latent_mask.shape[1],1)
-    #         gpt_mask = torch.matmul(latent_mask.transpose(1,2),latent_mask)
-    #         gpt_mask=gpt_mask.unsqueeze(1)
-    #         if all_time_points:
-    #             transformer_outputs_list = []
-    #             for t in range(0,data_transformer.shape[0],4):
-    #                 transformer_outputs_temp, _ = self.transformer(embeddings=data_transformer[t,:], masks = gpt_mask, cbox=cbox)
-    #                 transformer_outputs_list.append(transformer_outputs_temp)
-    #             transformer_outputs=torch.cat(transformer_outputs_list)
-    #             time_points_list_all.append(range(0,data_transformer.shape[0],4))
-    #             time_points_list = time_points_list_all
-
-    #         else:
-    #             transformer_outputs, _ = self.transformer(embeddings=data_transformer, masks = gpt_mask, cbox=cbox)
-    #         # # vq_embeddings=rearrange(vq_embeddings,'t (c s1) (h s2) (w s3) d-> (c h w) t (s1 s2 s3 d)',s1 =scale,s2 =scale,s3 =scale)
-
-    #         # transformer_outputs = torch.cat(sol_y_list)#temp
-    #         # transformer_outputs = rearrange(transformer_outputs,'l t d->t l d')#temp
-
-    #         c = int(c1/self.scale)
-    #         h = int(h1/self.scale)
-    #         w = int(w1/self.scale)
-    #         transformer_outputs = data_transformer           
-    #         transformer_outputs = rearrange(transformer_outputs,'t (c h w) (s1 s2 s3 d) -> t (c s1) (h s2) (w s3) d', s1 =self.scale,s2 =self.scale,s3 =self.scale,c=c,h=h,w=w)
-    #         transformer_outputs = rearrange(transformer_outputs,'t c h w d-> t (c h w) d')
-    #         logits = self.output_head(transformer_outputs)
-                        
-            
-    #         # logits = transformer_outputs
-    #         # flat_inputs = rearrange(logits,'t l d-> (t l) d')
-    #         # distances = (flat_inputs ** 2).sum(dim=1, keepdim=True) \
-    #         #             - 2 * flat_inputs @ self.first_stage_model.codebook.embeddings.t() \
-    #         #             + (self.first_stage_model.codebook.embeddings.t() ** 2).sum(dim=0, keepdim=True) # [bthw, c]
-    #         # logits = rearrange(-distances,'(t l) d->t l d',t=logits.shape[0])
-
-    #         # output_mask = torch.nn.functional.interpolate(lung_masks_idx,size=(c1,h1,w1),mode='trilinear',align_corners=False)
-            
-    #         c = int(c1/self.scale)
-    #         h = int(h1/self.scale)
-    #         w = int(w1/self.scale)
-    #         latent_mask = rearrange(latent_mask,'b t (c h w)->b t c h w',c=c,h=h,w=w)
-    #         output_mask = torch.nn.functional.interpolate(latent_mask,size=(c1,h1,w1),mode='trilinear',align_corners=False)
-    #         output_mask[output_mask>0]=1
-    #         output_mask = rearrange(output_mask,'b t c h w->b t (c h w)').squeeze().bool()
-
-    #         logits_list.append(logits)
-    #         logits_masked_list.append(logits[:,output_mask,:].reshape(-1,logits.shape[-1]))
-    #         targets_masked_list.append(z_indices[:,output_mask].reshape(-1))
-    #         # batch_size_transformer=4
-    #         # logits_list = []
-    #         # for i in range(self.args.timepoints/4):
-    #         #     logits, _ = self.transformer(data_transformer, cbox=cbox)
-    #         #     logits_list.append(logits)
-        
-    #         # logits_all = logits_list
-    #     logits_maksed_all= torch.cat(logits_masked_list)
-    #     target_maksed_all= torch.cat(targets_masked_list)
-    #     # # make the prediction by using transformer as decoder
-    #     # logits, _ = self.transformer(cz_indices[:, :-1], cbox=cbox)
-    #     # # logits, _ = self.transformer(cz_indices[:, :-1], cbox=cbox)
-    #     # # cut off conditioning outputs - output i corresponds to p(z_i | z_{<i}, c)
-    #     # logits = logits[:, c_indices.shape[1]-1:]
-    #     for idx in range(x.size()[0]):
-    #         if save_nii and logits_list[idx].shape[0]>1:
-    #             with torch.no_grad():
-    #                 if self.training:
-    #                     split='train'
-    #                 else:
-    #                     split='val'
-                    
-    #                 lung_masks_0 = lung_masks[idx]
-    #                 lung_masks_0 = lung_masks_0[:,None]
-    #                 output_mask = torch.nn.functional.interpolate(lung_masks_0,size=(c1,h1,w1),mode='trilinear',align_corners=False)
-    #                 # output_mask = torch.nn.functional.interpolate(lung_masks_0,size=(c1,h1,w1))
-    #                 output_mask[output_mask>0]=1
-    #                 output_mask = rearrange(output_mask.squeeze(),'c h w->(c h w)').bool()
-
-    #                 for t in range(logits_list[idx].shape[0]):
-    #                     predicted_indices = logits_list[idx][t,:]
-    #                     predicted_indices = predicted_indices.max(1).indices 
-    #                     baseline_indices = targets_list[idx][0,:].clone()
-    #                     baseline_indices[output_mask]=predicted_indices[output_mask]
-    #                     predicted_indices = baseline_indices
-    #                     predicted_indices = rearrange(predicted_indices,'(c h w)->c h w',c=c1,h=h1,w=w1)
-    #                     niis = self.first_stage_model.decode(predicted_indices.unsqueeze(0))
-    #                     niis = niis.squeeze().cpu().numpy()
-    #                     niis = niis.transpose(2,1,0)
-    #                     niis = np.flip(niis,axis=1)
-    #                     niis = np.flip(niis,axis=0)
-    #                     image_type = 'reconstruction'
-    #                     self.save_nii(self.logger.save_dir, split,image_type,niis ,
-    #                         self.global_step, self.current_epoch, patient_IDs[idx], time_points_list[idx][t])
-
-    #                     if not all_time_points:
-    #                         target_indices = targets_list[idx][t,:]
-    #                         baseline_indices = targets_list[idx][0,:].clone()
-    #                         baseline_indices[output_mask]=target_indices[output_mask]
-    #                         target_indices = baseline_indices
-    #                         target_indices = rearrange(target_indices,'(c h w)->c h w',c=c1,h=h1,w=w1)
-    #                         niis = self.first_stage_model.decode(target_indices.unsqueeze(0))
-    #                         niis = niis.squeeze().cpu().numpy()
-    #                         niis = niis.transpose(2,1,0)
-    #                         niis = np.flip(niis,axis=1)
-    #                         niis = np.flip(niis,axis=0)
-    #                         image_type = 'target'
-    #                         self.save_nii(self.logger.save_dir, split,image_type,niis,
-    #                             self.global_step, self.current_epoch,  patient_IDs[idx], time_points_list[idx][t])
-            
-
-    #     return logits_maksed_all, target_maksed_all
-
-
-# # only using ode
-#     def forward(self, x, c, batch_idx,time_points=None, lung_masks=None, cbox=None,save_nii=False,all_time_points = False,patient_IDs=None):
-#         # # one step to produce the logits
-#         # if x.size()[1]>1:
-#         #     x = rearrange(x,'b c h w d -> (b c) h w d') 
-#         #     x = x[:,None]
-#         # if time_points is not None:
-#         #     time_points = rearrange(time_points,'b t -> (b t)')
-#         #     observed_mask = ~torch.isnan(time_points)
-#         logits_list = []
-#         logits_masked_list = []
-#         targets_list = []
-#         targets_masked_list=[]
-#         time_points_list = []
-#         time_points_list_all = []
-#         for idx in range(x.size()[0]):
-#             temp = x[idx,:]
-#             temp = temp[:,None]
-#             vq_embeddings, z_indices = self.encode_to_z(temp)  
-#             lung_masks_idx = lung_masks[idx,:]
-#             lung_masks_idx = lung_masks_idx[:,None]
-#             # size_vq = vq_embeddings.size()
-#             # size_vq[0]=x.size()[0]
-#             # size_zindex = z_indices.size()
-#             # size_zindex[0]=x.size()[0]
-#             # vq_embeddings_latentODE = torch.zeros(size_vq)
-#             # z_indices_latentODE = torch.zeros(size_zindex)
-#             # vq_embeddings_latentODE[]
-#             # _, c_indices = self.encode_to_c(c)
-#             z_indices = z_indices + self.cond_stage_vocab_size
-
-#             if self.training and self.pkeep < 1.0:
-#                 mask = torch.bernoulli(self.pkeep*torch.ones(z_indices.shape,
-#                                                             device=z_indices.device))
-#                 mask = mask.round().to(dtype=torch.int64)
-#                 r_indices = torch.randint_like(z_indices, self.transformer.config.vocab_size)
-#                 a_indices = mask*z_indices+(1-mask)*r_indices
-#             else:
-#                 a_indices = z_indices
-
-#             # cz_indices = torch.cat((c_indices, a_indices), dim=1)
-#             # target includes all sequence elements (no need to handle first one
-#             # differently because we are conditioning)
-
-#             z_indices=rearrange(z_indices,'t c h w -> t (c h w)')
-#             observed_time_mask = ~torch.isnan(time_points[idx])
-#             z_indices = z_indices[observed_time_mask,:]  
-#             time_points_list.append(time_points[idx,observed_time_mask])        
-#             targets_list.append(z_indices)
-#             b,c1,h1,w1,d = vq_embeddings.size()
-#             latent_mask = torch.nn.functional.interpolate(lung_masks_idx,size=(int(c1/self.scale),int(h1/self.scale),int(w1/self.scale)),mode='trilinear',align_corners=False)
-#             latent_mask[latent_mask>0]=1
-#             vq_embeddings = vq_embeddings[:,latent_mask.bool().squeeze(),:]
-#             latent_mask = rearrange(latent_mask,'b t c h w->b t (c h w)')
-#             z_indices = z_indices[:,latent_mask.bool().squeeze()]
-#             data_object_list = self.latent_ODE_data_object(vq_embeddings,latent_mask[:,:,latent_mask.bool().squeeze()].bool(),time_points[idx],self.scale,z_indices.shape[1])
-#             sol_y_list = []
-            
-#             for i in range(len(data_object_list)):
-#                 sol_y,sol_y_all = self.latentODE_model.compute_all_losses(data_object_list[i],n_traj_samples=1)
-#                 if all_time_points:
-#                     sol_y_list.append(sol_y_all.mean(dim=0))
-#                 else:
-#                     sol_y_list.append(sol_y.mean(dim=0))
-#                 # sol_y=data_object_list[i]['data_to_predict']#temp
-#                 # sol_y_list.append(sol_y)#temp
-
-#             logits = torch.cat(sol_y_list)
-
-#             logits_masked_list.append(logits.reshape(-1,logits.shape[-1]))
-#             targets_masked_list.append(z_indices.reshape(-1))
-#             # batch_size_transformer=4
-#             # logits_list = []
-#             # for i in range(self.args.timepoints/4):
-#             #     logits, _ = self.transformer(data_transformer, cbox=cbox)
-#             #     logits_list.append(logits)
-        
-#             # logits_all = logits_list
-#         logits_maksed_all= torch.cat(logits_masked_list)
-#         target_maksed_all= torch.cat(targets_masked_list)
-#         target_maksed_embedding_all=self.first_stage_model.codebook.embeddings[target_maksed_all,:]
-
-# only using covgru-3dode
     def forward(self, x, c, batch_idx,time_points=None, lung_masks=None, cbox=None,save_nii=False,all_time_points = False,patient_IDs=None,validation_mode='only_observed'):
-        # # one step to produce the logits
-        # if x.size()[1]>1:
-        #     x = rearrange(x,'b c h w d -> (b c) h w d') 
-        #     x = x[:,None]
-        # if time_points is not None:
-        #     time_points = rearrange(time_points,'b t -> (b t)')
-        #     observed_mask = ~torch.isnan(time_points)
         print(patient_IDs)
         logits_list = []
         # logits_masked_list = []
@@ -482,18 +211,18 @@ class Net2NetTransformer(pl.LightningModule):
         logits,index_selected,true_intermediates,pred_intermediates = self.latentODE_model.compute_all_losses(batch_dict)
         weights = torch.linspace(0.1, 1, steps=self.args.timepoints)
         weights = weights[index_selected]
-        t1, c1, d1, h1, w1 = logits.shape
+        b1,t1, c1, d1, h1, w1 = logits.shape
         weights = repeat(weights,'t->b t d h w c',b=b, d=d1,h=h1,w=w1,c=c1)
         weights = weights[batch_dict['mask_predicted_data'].squeeze(-1).bool(),:]
         weights_flat =  weights[temp_mask,:]
         # logits = sol_y[batch_dict['mask_predicted_data'].squeeze(-1).bool(),:]
-        logits = rearrange(logits,'t c d h w->t d h w c')
-        logits_flat = logits[temp_mask,:]
-        true_intermediates = rearrange(true_intermediates,'t c d h w->t d h w c')
-        true_intermediates = true_intermediates[temp_mask,:]
+        logits = rearrange(logits,'b t c d h w->b t d h w c')
+        logits_flat = logits[:,temp_mask,:]
+        true_intermediates = rearrange(true_intermediates,'b t c d h w->b t d h w c')
+        true_intermediates = true_intermediates[:,temp_mask[1:,:],:]
         true_intermediates = true_intermediates.detach()
-        pred_intermediates = rearrange(pred_intermediates,'t c d h w->t d h w c')
-        pred_intermediates = pred_intermediates[temp_mask,:]        
+        pred_intermediates = rearrange(pred_intermediates,'b t c d h w->b t d h w c')
+        pred_intermediates = pred_intermediates[:,temp_mask[1:,:],:]        
         # logits_list.append(logits_flat.detach())
         # if all_time_points:
         #     sol_y_list.append(sol_y_all[:,:,:,latent_mask.bool().squeeze()])
@@ -541,23 +270,25 @@ class Net2NetTransformer(pl.LightningModule):
 
         
         if not self.args.classification:
-            distances = (logits_flat ** 2).sum(dim=1, keepdim=True) \
-                        - 2 * logits_flat @ self.first_stage_model.codebook.embeddings.t() \
+            distances = (logits_flat.squeeze(0) ** 2).sum(dim=1, keepdim=True) \
+                        - 2 * logits_flat.squeeze(0) @ self.first_stage_model.codebook.embeddings.t() \
                         + (self.first_stage_model.codebook.embeddings.t() ** 2).sum(dim=0, keepdim=True) # [bthw, c] 
             predicted_indices = torch.argmin(distances,dim=1)
         else:
             predicted_indices = torch.argmax(logits_maksed_all,dim=1)      
         # predicted_indices =  z_indices[0,temp_mask]
+
         baseline_indices =  z_indices[:,0,:].clone()
         baseline_indices = repeat(baseline_indices.unsqueeze(1),'b t c h w->b (r t) c h w',r=z_indices.shape[1])
-        baseline_indices=baseline_indices[batch_dict['mask_predicted_data'].squeeze(-1).bool(),:]
-        baseline_indices[temp_mask]=predicted_indices
+        # baseline_indices=baseline_indices[batch_dict['mask_predicted_data'].squeeze(-1).bool(),:]
+        baseline_indices[:,temp_mask]=predicted_indices
         predicted_indices = baseline_indices.clone()
         input_CTs = x[observed_time_mask.bool(),:][batch_dict['mask_predicted_data'].squeeze().bool(),:]
         reconstructed_CTs = torch.zeros(input_CTs.shape).cuda()
         lung_masks = repeat(lung_masks.bool(),'b t c h w->b (r t) c h w',r=z_indices.shape[1])[batch_dict['mask_predicted_data'].squeeze(-1).bool(),:]
-        if predicted_indices.shape[0]==1 and self.args.mode == "reconstruction":
-            lung_masks = lung_masks.unsqueeze(0)
+        # if predicted_indices.shape[0]==1:
+        #     lung_masks = lung_masks.unsqueeze(0)
+        #     predicted_indices = predicted_indices.unsqueeze(0)
         mse_loss = nn.MSELoss(reduction='sum')
         psnr = PeakSignalNoiseRatio().cuda()
         mse_sum=0
@@ -567,13 +298,14 @@ class Net2NetTransformer(pl.LightningModule):
         ms_ssim_sum = 0
         padding = nn.ReplicationPad3d(5)
         
+        predicted_indices=predicted_indices[0,:]
         if not self.training:
             with torch.no_grad():
                 for i in range(0,predicted_indices.shape[0]):
                     reconstructed_CTs[i,:]= self.first_stage_model.decode(predicted_indices[i:i+1,:])            
                     mse_sum=mse_sum+mse_loss(reconstructed_CTs[i,lung_masks[i]],input_CTs[i,lung_masks[i]]).detach()
                     psnr_sum = psnr_sum+psnr(reconstructed_CTs[i,lung_masks[i]],input_CTs[i,lung_masks[i]]).detach()*lung_masks[i].sum()
-                    if predicted_indices.shape[0]==1 and self.args.mode == "reconstruction":
+                    if predicted_indices.shape[1]==1:
                         _,ssim_map=ssim(padding(reconstructed_CTs[i:i+1]), padding(input_CTs[i:i+1]), data_range=1, size_average=False)
                         ssim_sum =ssim_sum+ssim_map[:,lung_masks[i]].sum()
                     else:
@@ -581,29 +313,30 @@ class Net2NetTransformer(pl.LightningModule):
                         ssim_sum =ssim_sum+ssim_map[:,:,lung_masks[i]].sum()
                     pixelNum_sum = pixelNum_sum+lung_masks[i].sum()
 
-                    # if save_nii:
-                    #     niis=reconstructed_CTs[i,:]-(reconstructed_CTs[i,0,0,0]+0.5)
-                    #     niis = torch.clamp(niis,-0.5,0.5)
-                    #     niis = niis.squeeze().cpu().numpy()
-                    #     niis = niis.transpose(2,1,0)
-                    #     niis = np.flip(niis,axis=1)
-                    #     niis = np.flip(niis,axis=0)
-                    #     mode = self.args.mode
-                    #     image_type = 'predicted'
-                    #     self.save_nii(self.logger.log_dir, mode,image_type,niis,
-                    #         patient_IDs[0], i)
+                    if save_nii:
+                        # niis=reconstructed_CTs[i,:]-(reconstructed_CTs[i,0,0,0]+0.5)
+                        # niis = torch.clamp(niis,-0.5,0.5)
+                        niis=reconstructed_CTs[i,:]
+                        niis = niis.squeeze().cpu().numpy()
+                        niis = niis.transpose(2,1,0)
+                        niis = np.flip(niis,axis=1)
+                        niis = np.flip(niis,axis=0)
+                        mode = self.args.mode
+                        image_type = 'predicted'
+                        self.save_nii(self.logger.log_dir, mode,image_type,niis,
+                            patient_IDs[0], i)
 
-                    #     niis = input_CTs[i,:]
-                    #     niis = niis.squeeze().cpu().numpy()
-                    #     niis = niis.transpose(2,1,0)
-                    #     niis = np.flip(niis,axis=1)
-                    #     niis = np.flip(niis,axis=0)
-                    #     mode = self.args.mode
-                    #     image_type = 'target'
-                    #     self.save_nii(self.logger.log_dir, mode,image_type,niis,
-                    #         patient_IDs[0], i)                
+                        niis = input_CTs[i,:]
+                        niis = niis.squeeze().cpu().numpy()
+                        niis = niis.transpose(2,1,0)
+                        niis = np.flip(niis,axis=1)
+                        niis = np.flip(niis,axis=0)
+                        mode = self.args.mode
+                        image_type = 'target'
+                        self.save_nii(self.logger.log_dir, mode,image_type,niis,
+                            patient_IDs[0], i)                
         
-                    # ms_ssim_sum = ms_ssim_sum+ms_ssim(padding(reconstructed_CTs[i:i+1].unsqueeze(0)), padding(input_CTs[i:i+1].unsqueeze(0)), data_range=1, size_average=False) 
+                    ms_ssim_sum = ms_ssim_sum+ms_ssim(padding(reconstructed_CTs[i:i+1].unsqueeze(0)), padding(input_CTs[i:i+1].unsqueeze(0)), data_range=1, size_average=False) 
                     # MS is too high
           
         # ssim_step = ssim_sum
@@ -696,336 +429,14 @@ class Net2NetTransformer(pl.LightningModule):
         #             self.save_nii(self.logger.save_dir, split,image_type,niis ,
         #                 self.global_step, self.current_epoch, patient_IDs[0], idx)                    
 
+
         return logits_maksed_all, target_maksed_all,target_maksed_embedding_all,ssim_sum,psnr_sum,mse_sum,pixelNum_sum,weights_flat,pred_intermediates,true_intermediates 
-
-# # only using transformer for predicting next frame
-#     def forward(self, x, c, batch_idx,time_points=None, lung_masks=None, cbox=None,save_nii=False,all_time_points = False,patient_IDs=None):
-
-#         logits_list = []
-#         logits_masked_list = []
-#         targets_list = []
-#         targets_masked_list=[]
-#         time_points_list = []
-#         time_points_list_all = []
-#         for idx in range(x.size()[0]):
-#             temp = x[idx,:]
-#             temp = temp[:,None]
-#             vq_embeddings, z_indices = self.encode_to_z(temp)  
-#             lung_masks_idx = lung_masks[idx,:]
-#             lung_masks_idx = lung_masks_idx[:,None]
-#             z_indices = z_indices + self.cond_stage_vocab_size
-
-#             if self.training and self.pkeep < 1.0:
-#                 mask = torch.bernoulli(self.pkeep*torch.ones(z_indices.shape,
-#                                                             device=z_indices.device))
-#                 mask = mask.round().to(dtype=torch.int64)
-#                 r_indices = torch.randint_like(z_indices, self.transformer.config.vocab_size)
-#                 a_indices = mask*z_indices+(1-mask)*r_indices
-#             else:
-#                 a_indices = z_indices
-
-#             z_indices=rearrange(z_indices,'t c h w -> t (c h w)')
-#             observed_time_mask = ~torch.isnan(time_points[idx])
-#             z_indices = z_indices[observed_time_mask,:]  
-
-#             time_points_list.append(time_points[idx,observed_time_mask])        
-#             targets_list.append(z_indices)
-#             b,c1,h1,w1,d = vq_embeddings.size()
-#             # latent_mask = torch.nn.functional.interpolate(lung_masks_idx,size=(int(c1/self.scale),int(h1/self.scale),int(w1/self.scale)),mode='trilinear',align_corners=False)
-#             latent_mask = torch.nn.functional.interpolate(lung_masks_idx,size=(int(c1/self.scale),int(h1/self.scale),int(w1/self.scale)),mode='trilinear',align_corners=False)
-#             latent_mask[latent_mask>0]=1
-#             latent_mask = rearrange(latent_mask,'b t c h w->b t (c h w)')
-#             data_transformer=rearrange(vq_embeddings,'t (c s1) (h s2) (w s3) d-> t (c h w) (s1 s2 s3 d)',s1 =self.scale,s2 =self.scale,s3 =self.scale)
-#             gpt_mask = torch.matmul(latent_mask.transpose(1,2),latent_mask)
-#             gpt_mask=gpt_mask.unsqueeze(1)
-#             transformer_outputs, _ = self.transformer(embeddings=data_transformer[0:1,:], masks = gpt_mask, cbox=cbox)
-#             c = int(c1/self.scale)
-#             h = int(h1/self.scale)
-#             w = int(w1/self.scale)      
-#             transformer_outputs = rearrange(transformer_outputs,'t (c h w) (s1 s2 s3 d) -> t (c s1) (h s2) (w s3) d', s1 =self.scale,s2 =self.scale,s3 =self.scale,c=c,h=h,w=w)
-#             transformer_outputs = rearrange(transformer_outputs,'t c h w d-> t (c h w) d')
-#             logits = self.output_head(transformer_outputs)
-            
-#             c = int(c1/self.scale)
-#             h = int(h1/self.scale)
-#             w = int(w1/self.scale)
-#             latent_mask = rearrange(latent_mask,'b t (c h w)->b t c h w',c=c,h=h,w=w)
-#             output_mask = torch.nn.functional.interpolate(latent_mask,size=(c1,h1,w1),mode='trilinear',align_corners=False)
-#             output_mask[output_mask>0]=1
-#             output_mask = rearrange(output_mask,'b t c h w->b t (c h w)').squeeze().bool()
-
-#             logits_list.append(logits)
-#             logits_masked_list.append(logits[:,output_mask,:].reshape(-1,logits.shape[-1]))
-#             targets_masked_list.append(z_indices[1:2,output_mask].reshape(-1))
-#             # batch_size_transformer=4
-#             # logits_list = []
-#             # for i in range(self.args.timepoints/4):
-#             #     logits, _ = self.transformer(data_transformer, cbox=cbox)
-#             #     logits_list.append(logits)
-        
-#             # logits_all = logits_list
-#         logits_maksed_all= torch.cat(logits_masked_list)
-#         target_maksed_all= torch.cat(targets_masked_list)   
-#         target_maksed_embedding_all=self.first_stage_model.codebook.embeddings[target_maksed_all,:]         
-
-
-
-#             # if save_nii and logits_list[idx].shape[0]>1:
-#         with torch.no_grad():
-#             if self.training:
-#                 split='train'
-#             else:
-#                 split='val'
-            
-#             lung_masks_0 = lung_masks[0]
-#             lung_masks_0 = lung_masks_0[:,None]
-#             output_mask = torch.nn.functional.interpolate(lung_masks_0,size=(c1,h1,w1),mode='trilinear',align_corners=False)
-#             # output_mask = torch.nn.functional.interpolate(lung_masks_0,size=(c1,h1,w1))
-#             output_mask[output_mask>0]=1
-#             output_mask = rearrange(output_mask.squeeze(),'c h w->(c h w)').bool()
-
-#             flat_inputs = logits_list[0][0,:]
-#             distances = (flat_inputs ** 2).sum(dim=1, keepdim=True) \
-#                         - 2 * flat_inputs @ self.first_stage_model.codebook.embeddings.t() \
-#                         + (self.first_stage_model.codebook.embeddings.t() ** 2).sum(dim=0, keepdim=True) # [bthw, c] 
-#             predicted_indices = torch.argmin(distances,dim=1)
-#             predicted_indices = distances.min(1).indices 
-#             baseline_indices = targets_list[0][0,:].clone()
-#             baseline_indices[output_mask]=predicted_indices[output_mask]
-#             predicted_indices = baseline_indices
-#             predicted_indices = rearrange(predicted_indices,'(c h w)->c h w',c=c1,h=h1,w=w1)
-#             niis = self.first_stage_model.decode(predicted_indices.unsqueeze(0))
-#             niis = niis.squeeze().cpu().numpy()
-#             niis = niis.transpose(2,1,0)
-#             niis = np.flip(niis,axis=1)
-#             niis = np.flip(niis,axis=0)
-#             image_type = 'reconstruction'
-#             self.save_nii(self.logger.save_dir, split,image_type,niis ,
-#                 self.global_step, self.current_epoch, patient_IDs[0], time_points_list[0][1])
-
-#             if not all_time_points:
-#                 target_indices = targets_list[idx][1,:]
-#                 baseline_indices = targets_list[idx][0,:].clone()
-#                 baseline_indices[output_mask]=target_indices[output_mask]
-#                 target_indices = baseline_indices
-#                 target_indices = rearrange(target_indices,'(c h w)->c h w',c=c1,h=h1,w=w1)
-#                 niis = self.first_stage_model.decode(target_indices.unsqueeze(0))
-#                 niis = niis.squeeze().cpu().numpy()
-#                 niis = niis.transpose(2,1,0)
-#                 niis = np.flip(niis,axis=1)
-#                 niis = np.flip(niis,axis=0)
-#                 image_type = 'target'
-#                 self.save_nii(self.logger.save_dir, split,image_type,niis,
-#                     self.global_step, self.current_epoch,  patient_IDs[0], time_points_list[0][1])
-                
-#                 target_indices = targets_list[idx][0,:]
-#                 baseline_indices = targets_list[idx][0,:].clone()
-#                 baseline_indices[output_mask]=target_indices[output_mask]
-#                 target_indices = baseline_indices
-#                 target_indices = rearrange(target_indices,'(c h w)->c h w',c=c1,h=h1,w=w1)
-#                 niis = self.first_stage_model.decode(target_indices.unsqueeze(0))
-#                 niis = niis.squeeze().cpu().numpy()
-#                 niis = niis.transpose(2,1,0)
-#                 niis = np.flip(niis,axis=1)
-#                 niis = np.flip(niis,axis=0)
-#                 image_type = 'baseline'
-#                 self.save_nii(self.logger.save_dir, split,image_type,niis,
-#                     self.global_step, self.current_epoch,  patient_IDs[0], time_points_list[0][0])
-                            
-#         return logits_maksed_all, target_maksed_all,target_maksed_embedding_all
-
-# # only using video swin transformer for predicting next frame
-#     def forward(self, x, c, batch_idx,time_points=None, lung_masks=None, cbox=None,save_nii=False,all_time_points = False,patient_IDs=None):
-
-#         logits_list = []
-#         logits_masked_list = []
-#         targets_list = []
-#         targets_masked_list=[]
-#         time_points_list = []
-#         time_points_list_all = []
-#         for idx in range(x.size()[0]):
-#             temp = x[idx,:]
-#             temp = temp[:,None]
-#             vq_embeddings, z_indices = self.encode_to_z(temp)  
-#             lung_masks_idx = lung_masks[idx,:]
-#             lung_masks_idx = lung_masks_idx[:,None]
-#             z_indices = z_indices + self.cond_stage_vocab_size
-
-#             if self.training and self.pkeep < 1.0:
-#                 mask = torch.bernoulli(self.pkeep*torch.ones(z_indices.shape,
-#                                                             device=z_indices.device))
-#                 mask = mask.round().to(dtype=torch.int64)
-#                 r_indices = torch.randint_like(z_indices, self.transformer.config.vocab_size)
-#                 a_indices = mask*z_indices+(1-mask)*r_indices
-#             else:
-#                 a_indices = z_indices
-
-#             observed_time_mask = ~torch.isnan(time_points[idx])
-#             z_indices = z_indices[observed_time_mask,:]  
-
-#             time_points_list.append(time_points[idx,observed_time_mask])        
-#             targets_list.append(z_indices)
-#             b,c1,h1,w1,d = vq_embeddings.size()
-#             # latent_mask = torch.nn.functional.interpolate(lung_masks_idx,size=(int(c1/self.scale),int(h1/self.scale),int(w1/self.scale)),mode='trilinear',align_corners=False)
-#             latent_mask = torch.nn.functional.interpolate(lung_masks_idx,size=(int(c1/self.scale),int(h1/self.scale),int(w1/self.scale)),mode='trilinear',align_corners=False)
-#             latent_mask[latent_mask>0]=1
-#             data_transformer = rearrange(vq_embeddings,'t c h w d -> t d c h w')
-#             transformer_outputs=self.transformer(data_transformer[0:1,:])
-
-#             output_mask = latent_mask.squeeze().bool()
-#             logits = self.output_head(rearrange(transformer_outputs,'t d c h w  -> t c h w d'))
-#             logits_list.append(logits)
-#             logits_masked_list.append(logits[:,output_mask,:].reshape(-1,logits.shape[-1]))
-#             targets_masked_list.append(z_indices[1:2,output_mask].reshape(-1))
-#             # batch_size_transformer=4
-#             # logits_list = []
-#             # for i in range(self.args.timepoints/4):
-#             #     logits, _ = self.transformer(data_transformer, cbox=cbox)
-#             #     logits_list.append(logits)
-        
-#             # logits_all = logits_list
-#         logits_maksed_all= torch.cat(logits_masked_list)
-#         target_maksed_all= torch.cat(targets_masked_list)   
-#         target_maksed_embedding_all=self.first_stage_model.codebook.embeddings[target_maksed_all,:]         
-
-
-
-#         #     # if save_nii and logits_list[idx].shape[0]>1:
-#         # with torch.no_grad():
-#         #     if self.training:
-#         #         split='train'
-#         #     else:
-#         #         split='val'
-            
-#         #     lung_masks_0 = lung_masks[0]
-#         #     lung_masks_0 = lung_masks_0[:,None]
-#         #     output_mask = torch.nn.functional.interpolate(lung_masks_0,size=(c1,h1,w1),mode='trilinear',align_corners=False)
-#         #     # output_mask = torch.nn.functional.interpolate(lung_masks_0,size=(c1,h1,w1))
-#         #     output_mask[output_mask>0]=1
-#         #     output_mask = rearrange(output_mask.squeeze(),'c h w->(c h w)').bool()
-
-#         #     flat_inputs = logits_list[0][0,:]
-#         #     distances = (flat_inputs ** 2).sum(dim=1, keepdim=True) \
-#         #                 - 2 * flat_inputs @ self.first_stage_model.codebook.embeddings.t() \
-#         #                 + (self.first_stage_model.codebook.embeddings.t() ** 2).sum(dim=0, keepdim=True) # [bthw, c] 
-#         #     predicted_indices = torch.argmin(distances,dim=1)
-#         #     predicted_indices = distances.min(1).indices 
-#         #     baseline_indices = targets_list[0][0,:].clone()
-#         #     baseline_indices[output_mask]=predicted_indices[output_mask]
-#         #     predicted_indices = baseline_indices
-#         #     predicted_indices = rearrange(predicted_indices,'(c h w)->c h w',c=c1,h=h1,w=w1)
-#         #     niis = self.first_stage_model.decode(predicted_indices.unsqueeze(0))
-#         #     niis = niis.squeeze().cpu().numpy()
-#         #     niis = niis.transpose(2,1,0)
-#         #     niis = np.flip(niis,axis=1)
-#         #     niis = np.flip(niis,axis=0)
-#         #     image_type = 'reconstruction'
-#         #     self.save_nii(self.logger.save_dir, split,image_type,niis ,
-#         #         self.global_step, self.current_epoch, patient_IDs[0], time_points_list[0][1])
-
-#         #     if not all_time_points:
-#         #         target_indices = targets_list[idx][1,:]
-#         #         baseline_indices = targets_list[idx][0,:].clone()
-#         #         baseline_indices[output_mask]=target_indices[output_mask]
-#         #         target_indices = baseline_indices
-#         #         target_indices = rearrange(target_indices,'(c h w)->c h w',c=c1,h=h1,w=w1)
-#         #         niis = self.first_stage_model.decode(target_indices.unsqueeze(0))
-#         #         niis = niis.squeeze().cpu().numpy()
-#         #         niis = niis.transpose(2,1,0)
-#         #         niis = np.flip(niis,axis=1)
-#         #         niis = np.flip(niis,axis=0)
-#         #         image_type = 'target'
-#         #         self.save_nii(self.logger.save_dir, split,image_type,niis,
-#         #             self.global_step, self.current_epoch,  patient_IDs[0], time_points_list[0][1])
-                
-#         #         target_indices = targets_list[idx][0,:]
-#         #         baseline_indices = targets_list[idx][0,:].clone()
-#         #         baseline_indices[output_mask]=target_indices[output_mask]
-#         #         target_indices = baseline_indices
-#         #         target_indices = rearrange(target_indices,'(c h w)->c h w',c=c1,h=h1,w=w1)
-#         #         niis = self.first_stage_model.decode(target_indices.unsqueeze(0))
-#         #         niis = niis.squeeze().cpu().numpy()
-#         #         niis = niis.transpose(2,1,0)
-#         #         niis = np.flip(niis,axis=1)
-#         #         niis = np.flip(niis,axis=0)
-#         #         image_type = 'baseline'
-#         #         self.save_nii(self.logger.save_dir, split,image_type,niis,
-#         #             self.global_step, self.current_epoch,  patient_IDs[0], time_points_list[0][0])
-                            
-#         return logits_maksed_all, target_maksed_all,target_maksed_embedding_all
     
     def top_k_logits(self, logits, k):
         v, ix = torch.topk(logits, k)
         out = logits.clone()
         out[out < v[..., [-1]]] = -float('Inf')
         return out
-
-    # # for ode+transformer
-    # def latent_ODE_data_object(self,vq_embeddings,latent_mask,time_points,scale=4,batch_size_ode=1):
-    #     # stack batch across l of different patients
-    #     vq_embeddings=rearrange(vq_embeddings,'t (c s1) (h s2) (w s3) d-> (c h w) t (s1 s2 s3 d)',s1 =scale,s2 =scale,s3 =scale)
-    #     latent_mask = rearrange(latent_mask.squeeze(1),'t l->l t')
-    #     data_object_list = []
-    #     observed_time_mask = ~torch.isnan(time_points)
-    #     observed_data = vq_embeddings[:,observed_time_mask,:]       
-    #     latent_mask = repeat(latent_mask,'l t->l (t repeat)',repeat=observed_data.shape[1])
-    #     if observed_data.size()[1]>2:
-    #         observed_mask = torch.zeros(observed_data.size(),device=observed_data.device)
-    #         observed_mask[latent_mask,:]=1
-    #         observed_mask[:,-1,:]=0           
-    #     else:
-    #         observed_mask = torch.zeros(observed_data.size(),device=observed_data.device)
-    #         observed_mask[latent_mask,:]=1
-    #     observed_mask_predicted = torch.zeros(observed_data.size(),device=observed_data.device)
-    #     observed_mask_predicted[latent_mask,:]=1
-    #     observed_data[observed_mask==0]=0
-    #     for i in range(0,vq_embeddings.size()[0],batch_size_ode):
-    #         observed_data_batch=observed_data[i:(i+batch_size_ode),:]
-    #         batch_dict = {"tp_to_predict":torch.arange(0,self.timepoints,device=observed_data.device)*1.0,
-    #                       "observed_data":observed_data_batch,
-    #                       "observed_tp":time_points[observed_time_mask],
-    #                       "observed_mask":observed_mask[i:(i+batch_size_ode),:],
-    #                       "data_to_predict":observed_data_batch.clone(),
-    #                       "mask_predicted_data":observed_mask_predicted[i:(i+batch_size_ode),:]
-    #                       }
-    #         data_object_list.append(batch_dict)
-
-    #     return data_object_list
-
-    # # # for only ode
-    # def latent_ODE_data_object(self,vq_embeddings,latent_mask,time_points,scale=4,batch_size_ode=1):
-    #     # stack batch across l of different patients
-    #     vq_embeddings=rearrange(vq_embeddings,'t l d-> l t d')
-    #     latent_mask = rearrange(latent_mask.squeeze(1),'t l->l t')
-    #     data_object_list = []
-    #     observed_time_mask = ~torch.isnan(time_points)
-    #     observed_data = vq_embeddings[:,observed_time_mask,:]       
-    #     latent_mask = repeat(latent_mask,'l t->l (t repeat)',repeat=observed_data.shape[1])
-    #     # if observed_data.size()[1]>2:
-    #     #     observed_mask = torch.zeros(observed_data.size(),device=observed_data.device)
-    #     #     observed_mask[latent_mask,:]=1
-    #     #     observed_mask[:,-1,:]=0           
-    #     # else:
-    #     #     observed_mask = torch.zeros(observed_data.size(),device=observed_data.device)
-    #     #     observed_mask[latent_mask,:]=1
-    #     observed_mask = torch.zeros(observed_data.size(),device=observed_data.device)
-    #     observed_mask[latent_mask,:]=1
-
-    #     observed_mask_predicted = torch.zeros(observed_data.size(),device=observed_data.device)
-    #     observed_mask_predicted[latent_mask,:]=1
-    #     observed_data[observed_mask==0]=0
-    #     for i in range(0,vq_embeddings.size()[0],batch_size_ode):
-    #         observed_data_batch=observed_data[i:(i+batch_size_ode),:]
-    #         batch_dict = {"tp_to_predict":torch.arange(0,self.timepoints,device=observed_data.device)*1.0,
-    #                       "observed_data":observed_data_batch,
-    #                       "observed_tp":time_points[observed_time_mask],
-    #                       "observed_mask":observed_mask[i:(i+batch_size_ode),:],
-    #                       "data_to_predict":observed_data_batch.clone(),
-    #                       "mask_predicted_data":observed_mask_predicted[i:(i+batch_size_ode),:]
-    #                       }
-    #         data_object_list.append(batch_dict)
-
-    #     return data_object_list
 
 
  # # for video-ode
@@ -1037,6 +448,8 @@ class Net2NetTransformer(pl.LightningModule):
         # if torch.isnan(observed_tp[-1]):
         #     observed_tp =observed_tp[:-1] 
         # data_object_list = []
+        # observed_time_mask is the mask indicating which time points we have CT scans, size = [1,max_time_points]
+
         time_steps = torch.unique(batch_time_points.view(-1))
         time_steps = time_steps[~torch.isnan(time_steps)]
         time_points_flag = torch.zeros(batch_time_points.shape[0],len(time_steps))
@@ -1054,9 +467,9 @@ class Net2NetTransformer(pl.LightningModule):
                 observed_data[b,observed_mask.squeeze(-1).bool()[b,:],:]=vq_embeddings[b,observed_time_mask[b,:].bool(),:]
                 z_indices_combined[b,observed_mask.squeeze(-1).bool()[b,:],:]=z_indices[b,observed_time_mask[b,:].bool(),:]               
                 pos = torch.where(observed_mask[b,:,:]==True)[0][-1]
-                # observed_mask[b,:,:]=False
-                # observed_mask[b,0,:]=True
-                # observed_mask[b,pos,:]=True
+                observed_mask[b,:,:]=False
+                observed_mask[b,0,:]=True
+                observed_mask[b,pos,:]=True
                 mask_predicted_data[b,0,:] = False
                 mask_predicted_data[b,pos,:] = False
 
@@ -1079,8 +492,8 @@ class Net2NetTransformer(pl.LightningModule):
                 z_indices_combined[b,observed_mask.squeeze(-1).bool()[b,:],:]=z_indices[b,observed_time_mask[b,:].bool(),:]
                 pos = torch.where(observed_mask[b,:,:]==True)[0]              
                 # mask_predicted_data[b,pos[0:2],:]=False
-                # observed_mask[b,:,:]=False
-                # observed_mask[b,pos[0:2]]=True
+                observed_mask[b,:,:]=False
+                observed_mask[b,pos[0:2]]=True
                 # mask_predicted_data[b,0:2,:]=False
                 # observed_mask[b,2:]=False
 
@@ -1117,7 +530,27 @@ class Net2NetTransformer(pl.LightningModule):
             observed_data[~(observed_mask.squeeze(-1).bool()),:]=0  
             for b in range(0,observed_time_mask.shape[0]):
                 observed_data[b,:,:,~(latent_mask[b,0,:].bool())] = 0
-                data_to_predict[b,:,:,~(latent_mask[b,0,:].bool())] = 0                    
+                data_to_predict[b,:,:,~(latent_mask[b,0,:].bool())] = 0
+        elif self.mode == 'mixed':
+            data_to_predict = observed_data.clone()  
+            mask_predicted_data = observed_mask.clone()         
+            for b in range(0,observed_time_mask.shape[0]):
+                observed_data[b,observed_mask.squeeze(-1).bool()[b,:],:]=vq_embeddings[b,observed_time_mask[b,:].bool(),:]
+                data_to_predict[b,:]=observed_data[b,:]
+                z_indices_combined[b,observed_mask.squeeze(-1).bool()[b,:],:]=z_indices[b,observed_time_mask[b,:].bool(),:]
+                if(sum(observed_mask[b,:]))>1:
+                    observed_indices = torch.nonzero(observed_mask[b, 1:,0], as_tuple=False).squeeze(-1) + 1  # Exclude 
+                    num_additional_points = torch.randint(1, observed_indices.numel()+1, (1,)).item()
+                    additional_observed_index = torch.randperm(observed_indices.numel())[:num_additional_points] + 1
+                    observed_mask[b, :,0] = 0
+                    observed_mask[b, 0,0] = 1
+                    observed_mask[b, additional_observed_index,0] = 1
+                observed_data[b,~observed_mask.squeeze(-1).bool()[b,:],:]=0
+                z_indices_combined[b,~observed_mask.squeeze(-1).bool()[b,:],:]=0
+                observed_data[b,:,:,~(latent_mask[b,0,:].bool())] = 0
+                data_to_predict[b,:,:,~(latent_mask[b,0,:].bool())] = 0
+
+                                                                
         else: 
             raise NotImplementedError 
 
@@ -1228,23 +661,6 @@ class Net2NetTransformer(pl.LightningModule):
             c = c[:N]
         return x, c,time_points
 
-    # def shared_step(self, batch, batch_idx,save_nii=False,all_time_points=False):
-    #     if not self.vtokens:
-    #         self.first_stage_model.eval()
-    #     x, c,time_points = self.get_xc(batch)
-    #     lung_masks = batch['longitudianl_lung_masks']
-    #     patient_IDs = batch['patientID']
-    #     if self.args.vtokens_pos:
-    #         cbox = batch['cbox']
-    #     else:
-    #         cbox = None
-    #     # print('train:', x.min(), x.max(), x.shape, c)
-    #     logits, target = self(x, c, batch_idx,time_points, lung_masks,cbox,save_nii,all_time_points,patient_IDs)
-    #     if not all_time_points:
-    #         loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), target.reshape(-1))
-    #         acc1, acc5 = accuracy(logits.reshape(-1, logits.shape[-1]), target.reshape(-1), topk=(1, 5))
-    #         return loss, acc1, acc5
-
     def shared_step(self, batch, batch_idx,save_nii=False,all_time_points=False,validation_mode='only_observed'):
         if not self.vtokens:
             self.first_stage_model.eval()
@@ -1257,7 +673,7 @@ class Net2NetTransformer(pl.LightningModule):
             cbox = None
         # print('train:', x.min(), x.max(), x.shape, c)
         logits, target, target_embedding,ssim_sum,psnr_sum,mse_sum,pixelNum_sum,weights_flat,pred_intermediates,true_intermediates = self(x, c, batch_idx,time_points, lung_masks,cbox,save_nii,all_time_points,patient_IDs,validation_mode)
-
+        logits = logits.squeeze(0)
         if not all_time_points:
             if not self.args.classification:
                 # loss = F.mse_loss(logits, target_embedding)
@@ -1312,8 +728,8 @@ class Net2NetTransformer(pl.LightningModule):
         return loss
 
     def test_step(self, batch, batch_idx):
-        if (batch['patientID']!=457):
-            return
+        # if (batch['patientID']!=457):
+        #     return
         # loss, acc1, acc5 =self.shared_step(batch, batch_idx,save_nii=False,all_time_points=True)
         # print(loss)
         # loss, acc1, acc5,ssim_step,psnr_step,mse_step = self.shared_step(batch, batch_idx,save_nii=False,all_time_points=True)
@@ -1321,10 +737,10 @@ class Net2NetTransformer(pl.LightningModule):
         self.loss_list.append(loss.detach().cpu())
         self.acc1_sum_list.append((acc1*pixelNum_sum).detach().cpu())
         self.acc5_sum_list.append((acc5*pixelNum_sum).detach().cpu())
-        self.ssim_sum_list.append(ssim_sum.detach().cpu())
-        self.psnr_sum_list.append(psnr_sum.detach().cpu())
-        self.mse_sum_list.append(mse_sum.detach().cpu())
-        self.pixelNum_sum_list.append(pixelNum_sum.detach().cpu())
+        # self.ssim_sum_list.append(ssim_sum.detach().cpu())
+        # self.psnr_sum_list.append(psnr_sum.detach().cpu())
+        # self.mse_sum_list.append(mse_sum.detach().cpu())
+        # self.pixelNum_sum_list.append(pixelNum_sum.detach().cpu())
 
 
         
@@ -1343,67 +759,7 @@ class Net2NetTransformer(pl.LightningModule):
 
 
     def configure_optimizers(self):
-        """
-        Following minGPT:
-        This long function is unfortunately doing something very simple and is being very defensive:
-        We are separating out all parameters of the model into two buckets: those that will experience
-        weight decay for regularization and those that won't (biases, and layernorm/embedding weights).
-        We are then returning the PyTorch optimizer object.
-        """
-        # # separate out all parameters to those that will and won't experience regularizing weight decay
-        # decay = set()
-        # no_decay = set()
-        # whitelist_weight_modules = (torch.nn.Linear, )
-        # blacklist_weight_modules = (torch.nn.LayerNorm, torch.nn.Embedding)
-        # # for mn, m in self.transformer.named_modules():
-        # for mn, m in chain(self.transformer.named_modules(),self.latentODE_model.named_modules(),self.output_head.named_modules()):
-        # # for mn, m in chain(self.transformer.named_modules(),self.output_head.named_modules()):
-        #     for pn, p in m.named_parameters():               
-        #         fpn = '%s.%s' % (mn, pn) if mn else pn # full param name
-        #         if pn.endswith('bias'):
-        #             # all biases will not be decayed
-        #             no_decay.add(fpn)
-        #         elif pn.endswith('weight') and isinstance(m, whitelist_weight_modules):
-        #             # weights of whitelist modules will be weight decayed
-        #             decay.add(fpn)
-        #         elif pn.endswith('weight') and isinstance(m, blacklist_weight_modules):
-        #             # weights of blacklist modules will NOT be weight decayed
-        #             no_decay.add(fpn)
-        #         else:
-        #             decay.add(fpn)
-
-        # # special case the position embedding parameter in the root GPT module as not decayed
-        # # no_decay.add('pos_emb')
-        # if self.args.vtokens_pos:
-        #     no_decay.add('vtokens_pos_emb')
-
-        # # validate that we considered every parameter
-        # # param_dict = {pn: p for pn, p in self.transformer.named_parameters()}
-        # param_dict = {pn: p for pn, p in chain(self.transformer.named_parameters(),self.latentODE_model.named_parameters(),self.output_head.named_parameters())}
-        # # param_dict = {pn: p for pn, p in chain(self.transformer.named_parameters(),self.output_head.named_parameters())}    
-        # inter_params = decay & no_decay
-        # union_params = decay | no_decay
-        # assert len(inter_params) == 0, "parameters %s made it into both decay/no_decay sets!" % (str(inter_params), )
-        # assert len(param_dict.keys() - union_params) == 0, "parameters %s were not separated into either decay/no_decay set!" \
-        #                                             % (str(param_dict.keys() - union_params), )
-
-        # # create the pytorch optimizer object
-        # optim_groups = [
-        #     {"params": [param_dict[pn] for pn in sorted(list(decay))], "weight_decay": 0.01},
-        #     {"params": [param_dict[pn] for pn in sorted(list(no_decay))], "weight_decay": 0.0},
-        # ]
-        # if self.args.optimizer=='SAM':
-        #     base_optimizer = torch.optim.AdamW  # define an optimizer for the "sharpness-aware" update
-        #     optimizer = SAM(optim_groups, base_optimizer, lr=self.learning_rate, betas=(0.9, 0.95))
-        # else:
-        #     optimizer = torch.optim.AdamW(optim_groups, lr=self.learning_rate, betas=(0.9, 0.95))
-        # optimizer = torch.optim.SGD(self.parameters(), lr=self.learning_rate)
         optimizer = torch.optim.AdamW(chain(self.latentODE_model.parameters(),self.output_head.parameters()), lr=self.learning_rate, betas=(0.9, 0.95))
-        # optim_groups = [
-        #     {"params": self.transformer.parameters(), "lr": self.learning_rate},
-        #     {"params": self.output_head.parameters(), "lr": self.learning_rate*10},
-        # ]
-        # optimizer = torch.optim.AdamW(optim_groups, betas=(0.9, 0.95))
         return optimizer
 
 

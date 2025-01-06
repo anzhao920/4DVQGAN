@@ -167,8 +167,7 @@ class Encoder_z0_ODE_ConvGRU(nn.Module):
                 if self.ode_rnn:
                     inc = self.z0_diffeq_solver.ode_func(prev_t, prev_input_tensor) * (t_i - prev_t)
                     assert (not torch.isnan(inc).any())
-                    tracker.write_info(key=f"inc{idx}", value=inc.clone().cpu())
-                    
+                    tracker.write_info(key=f"inc{idx}", value=inc.clone().cpu())  
                     ode_sol = prev_input_tensor + inc
                 else:
                     ode_sol = prev_input_tensor

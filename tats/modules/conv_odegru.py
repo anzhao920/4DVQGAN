@@ -178,10 +178,16 @@ class VidODE(nn.Module):
         else:
             b, t, c, d, h, w  = sol_y_all.shape
             index_selected = (truth_time_steps*self.args.timepoints).long()
-            sol_y = sol_y_all[0:sol_y_all.shape[0],index_selected,:]
+            # sol_y = sol_y_all[0:sol_y_all.shape[0],index_selected,:]
+            sol_y = sol_y_all
+
+
             # regular b, t, 6, h, w / irregular b, t * ratio, 6, h, w
             # pred_outputs = self.get_flowmaps_new(sol_out=sol_y, first_prev_embed=skip_conn_embed,mask = out_mask) # b, t, 6, h, w
-            pred_outputs = self.get_flowmaps_new(sol_out=sol_y, first_prev_embed=skip_conn_embed,mask = mask) # b, t, 6, h, w
+            # temp_mask = mask.clone()
+            # temp_mask[:]=1
+            temp_mask = torch.ones(b,pred_t_len,1)
+            pred_outputs = self.get_flowmaps_new(sol_out=sol_y, first_prev_embed=skip_conn_embed,mask = temp_mask) # b, t, 6, h, w
             pred_outputs = torch.cat(pred_outputs, dim=1)
             pred_flows, pred_intermediates, pred_masks = \
                 pred_outputs[:, :, 0:3, ...],pred_outputs[:, :, 3:(3+self.input_dim), ...], torch.sigmoid(pred_outputs[:, :, (3+self.input_dim):, ...])
@@ -212,21 +218,36 @@ class VidODE(nn.Module):
                 warped_pred_x = self.get_warped_images_new(pred_flows=pred_flows, start_image=last_frame, grid=grid,residual = self.args.residual)
                 warped_pred_x = torch.cat(warped_pred_x, dim=1)  # regular b, t, 6, h, w / irregular b, t * ratio, 6, h, w
                 pred_x = pred_masks * warped_pred_x + (1 - pred_masks) * pred_intermediates
+                pred_x = pred_x[0:b,index_selected,:]
+                pred_x = pred_x[out_mask.squeeze(-1).bool(),...]
+                if b==1:
+                    pred_x= pred_x.unsqueeze(0)
+                pred_intermediates_new = pred_x[:, 1:, ...] - pred_x[:, :-1, ...]
+                true_intermediates_new = truth[:, 1:, ...] - truth[:, :-1, ...]
+                
             else:
                 pred_x = pred_intermediates.clone()
-                true_intermediates = pred_intermediates.clone()
-                truth = torch.cat([last_frame.unsqueeze(0),truth],dim=1)
-                for i in range(0,pred_intermediates.shape[1]):
-                    pred_x[:,i,:] = last_frame + torch.sum(pred_intermediates[:,0:(i+1),:],dim=1)
-                    true_intermediates[:,i,:] = truth[:,i+1,:]-truth[:,i,:]
+                pred_x = pred_x[0:b,index_selected,:]
+                pred_x = pred_x[out_mask.squeeze(-1).bool(),...]
+                # true_intermediates = pred_intermediates.clone()
+                if b==1:
+                    pred_x= pred_x.unsqueeze(0)
+                # truth = torch.cat([last_frame.unsqueeze(0),truth],dim=1)
+                for i in range(0,pred_x.shape[1]):
+                    pred_x[:,i,:] = last_frame + torch.sum(pred_intermediates[:,0:(index_selected[i]+1),:],dim=1)
+
+                pred_intermediates_new = pred_x[:, 1:, ...] - pred_x[:, :-1, ...]
+                true_intermediates_new = truth[:, 1:, ...] - truth[:, :-1, ...]
+                    # true_intermediates[:,i,:] = truth[:,i+1,:]-truth[:,i,:]
+                
                     # if i==0:
                     #     true_intermediates[:,i,:]=0
                     # else:
                     #     true_intermediates[:,i,:] = truth[:,i,:]-truth[:,i-1,:]
 
-            pred_x = pred_x[out_mask.squeeze(-1).bool(),:]
-            true_intermediates = true_intermediates[out_mask.squeeze(-1).bool(),:]
-            pred_intermediates = pred_intermediates[out_mask.squeeze(-1).bool(),:]
+                # pred_x = pred_x[out_mask.squeeze(-1).bool(),:]
+                # true_intermediates_new = true_intermediates[out_mask.squeeze(-1).bool(),:]
+                # pred_intermediates_new = pred_intermediates[out_mask.squeeze(-1).bool(),:]
             # pred_x = pred_x[out_mask[out_mask.bool()].view(b,-1).bool(),:]
             # true_intermediates = true_intermediates[out_mask[out_mask.bool()].view(b,-1).bool(),:]
             # pred_intermediates = pred_intermediates[out_mask[out_mask.bool()].view(b,-1).bool(),:]
@@ -236,7 +257,7 @@ class VidODE(nn.Module):
             
             # pred_x = pred_x.view(b, -1, c, d, h, w)
         # truth[0,]
-        return pred_x,index_selected,true_intermediates.detach(),pred_intermediates
+        return pred_x,index_selected,true_intermediates_new.detach(),pred_intermediates_new
         # else:
         #     # not ready yet
         #     ##### Conv decoding

@@ -39,7 +39,7 @@ def main():
     args.block_size = 1537
     
     # transformer parameters
-    args.n_layer=6
+    args.n_layer=3
     args.n_head=8
     args.n_embd=1024
     args.first_stage_key = 'longitudianl_CT_scans'
@@ -84,10 +84,12 @@ def main():
     args.residual = True
     args.ode_rnn = False
     args.time_window_max = 365.25*6
-    args.timepoints = round(args.time_window_max/90)+5
+    args.timepoints = round(args.time_window_max/90)+1
     args.downsample_latent = False
     args.flowmap = True
     args.run_backwards = True
+    # args.ode_n_unit = 128
+    # args.adjoint = False
     data = VideoData(args)
     # pre-make relevant cached files if necessary
     data.train_dataloader()
@@ -133,7 +135,8 @@ def main():
     #         ckpt_folder = os.path.join(base_dir, log_folder, 'checkpoints')
     #         for fn in os.listdir(ckpt_folder):
     #             if fn == 'latest_checkpoint.ckpt':
-    #                 ckpt_file = 'latest_checkpoint_prev.ckpt'
+    #                 ckpt_file = 'latest_ch
+    # eckpoint_prev.ckpt'
     #                 os.rename(os.path.join(ckpt_folder, fn), os.path.join(ckpt_folder, ckpt_file))
     #         if len(ckpt_file) > 0:
     #             args.resume_from_checkpoint = os.path.join(ckpt_folder, ckpt_file)
@@ -142,20 +145,20 @@ def main():
     trainer = pl.Trainer.from_argparse_args(args, callbacks=callbacks,
                                             max_steps=args.max_steps,**kwargs)
     print(trainer.logger.log_dir)
-    trainer.fit(model, data)
+    # trainer.fit(model, data)
     
-    # model_path = "./transformer_experiment_1/lightning_logs/best_checkpoint_train_loss.ckpt"
-    # model = Net2NetTransformer.load_from_checkpoint(model_path,args=args)
-    # model.eval()
-    # trainer.test(model, data)
-    # pixelNum_sum = np.stack(model.pixelNum_sum_list).sum()
-    # print('model_path: ',model_path)
-    # print('test mode: ',args.mode)
-    # print('acc1_mean: ',np.stack(model.acc1_sum_list).sum()/pixelNum_sum)
-    # print('acc5_mean: ',np.stack(model.acc5_sum_list).sum()/pixelNum_sum)
-    # print('ssim_mean: ',np.stack(model.ssim_sum_list).sum()/pixelNum_sum)
-    # print('psnr_mean: ',np.stack(model.psnr_sum_list).sum()/pixelNum_sum)
-    # print('mse_mean: ',np.stack(model.mse_sum_list).sum()/pixelNum_sum)
+    model_path = "./transformer_experiment_1/lightning_logs/best_checkpoint_train_loss_old.ckpt"
+    model = Net2NetTransformer.load_from_checkpoint(model_path,args=args)
+    model.eval()
+    trainer.test(model, data)
+    pixelNum_sum = np.stack(model.pixelNum_sum_list).sum()
+    print('model_path: ',model_path)
+    print('test mode: ',args.mode)
+    print('acc1_mean: ',np.stack(model.acc1_sum_list).sum()/pixelNum_sum)
+    print('acc5_mean: ',np.stack(model.acc5_sum_list).sum()/pixelNum_sum)
+    print('ssim_mean: ',np.stack(model.ssim_sum_list).sum()/pixelNum_sum)
+    print('psnr_mean: ',np.stack(model.psnr_sum_list).sum()/pixelNum_sum)
+    print('mse_mean: ',np.stack(model.mse_sum_list).sum()/pixelNum_sum)
     
 
 if __name__ == '__main__':

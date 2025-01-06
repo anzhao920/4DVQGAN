@@ -27,7 +27,6 @@ def main():
     # args.log_every_n_steps=5
 
     # Net2NetTransformer args
-    # args.vqvae = "/cluster/project7/IPFMortalityPredictionNewloss/TATS-main/experiment6/lightning_logs/version_0/checkpoints/latest_checkpoint-v1.ckpt"
     args.vqvae = "/cluster/project7/IPFMortalityPredictionNewloss/TATS-main/experiment15/lightning_logs/version_0/checkpoints/epoch=195-step=17999-train/recon_loss=0.11.ckpt"
     args.unconditional = True
     args.longitudinal_CT_scans = True
@@ -66,10 +65,6 @@ def main():
     args.img_path = 'Leuven_IPF_registered'
     args.mask_path ='Leuven_IPF_registered_mask'
     args.label_path = 'Leuven_data_label.csv'
-    # args.external_data_root = 'C:/Users/An/OneDrive - University College London/SouthamptonExternalData/'
-    # args.external_img_path = 'CTscans' 
-    # args.external_mask_path = 'Lungmasks'
-    # args.external_label_path = 'MortalityDataSouthampton.csv'
     args.external_data_root = '/cluster/project7/IPFPrognosisPredictionNew/'
     args.external_img_path = 'Leuven_IPF_registered'
     args.external_mask_path = 'Leuven_IPF_registered_mask'
@@ -93,8 +88,7 @@ def main():
 
     callbacks = []
     callbacks.append(GPUStatsMonitor())
-    callbacks.append(ModelCheckpoint(every_n_train_steps=10, save_top_k=-1, filename='{epoch}-{step}-{train/loss:.2f}'))
-    # # callbacks.append(ModelCheckpoint(every_n_train_steps=5000, save_top_k=-1, filename='{epoch}-{step}-{train/loss:.2f}'))
+    callbacks.append(ModelCheckpoint(every_n_train_steps=1000, save_top_k=-1, filename='{epoch}-{step}-{train/loss:.2f}'))
     callbacks.append(ModelCheckpoint(monitor='val/loss', mode='min', save_top_k=1, filename='best_checkpoint_val_loss'))
     callbacks.append(ModelCheckpoint(monitor='train/loss', mode='min', save_top_k=1, filename='best_checkpoint_train_loss'))
     callbacks.append(ModelCheckpoint(save_last=True))
@@ -116,25 +110,7 @@ def main():
     print("Setting learning rate to {:.2e} = {} (accumulate_grad_batches) * {} (num_gpus) * {} (batchsize) * {:.2e} (base_lr)".format(
         model.learning_rate, accumulate_grad_batches, ngpu, bs, base_lr))
 
-    # # load the most recent checkpoint file
-    # base_dir = os.path.join(args.default_root_dir, 'lightning_logs')
-    # if os.path.exists(base_dir):
-    #     log_folder = ckpt_file = ''
-    #     version_id_used = step_used = -1
-    #     for folder in os.listdir(base_dir):
-    #         version_id = int(folder.split('_')[1])
-    #         if version_id > version_id_used:
-    #             version_id_used = version_id
-    #             log_folder = folder
-    #     if len(log_folder) > 0:
-    #         ckpt_folder = os.path.join(base_dir, log_folder, 'checkpoints')
-    #         for fn in os.listdir(ckpt_folder):
-    #             if fn == 'latest_checkpoint.ckpt':
-    #                 ckpt_file = 'latest_checkpoint_prev.ckpt'
-    #                 os.rename(os.path.join(ckpt_folder, fn), os.path.join(ckpt_folder, ckpt_file))
-    #         if len(ckpt_file) > 0:
-    #             args.resume_from_checkpoint = os.path.join(ckpt_folder, ckpt_file)
-    #             print('will start from the recent ckpt %s'%args.resume_from_checkpoint)
+    # # resume from a checkpoint file   
     # args.resume_from_checkpoint = '/cluster/project7/IPFMortalityPredictionNewloss/TATS-main/transformer_experiment_1/lightning_logs/version_6/checkpoints/epoch=68-step=11999-train/loss=3.65.ckpt'
     trainer = pl.Trainer.from_argparse_args(args, callbacks=callbacks,
                                             max_steps=args.max_steps,**kwargs,resume_from_checkpoint='/cluster/project7/IPFMortalityPredictionNewloss/TATS-main/transformer_experiment_1/lightning_logs/version_96/checkpoints/epoch=21-step=659-train/loss=3.75.ckpt')

@@ -778,7 +778,12 @@ class IPFLongitudinalCTDataset(data.Dataset):
         elif self.mode == 'reconstruction' or self.mode=='one-year':
             for patient in patients:
                 patient_img_path_list = self.labels[self.labels.patient_id==patient]['image_path'].to_numpy()
-                self.patient_IDs.append(patient)        
+                self.patient_IDs.append(patient)  
+        elif self.mode == 'mixed':
+            for patient in patients:
+                patient_img_path_list = self.labels[self.labels.patient_id==patient]['image_path'].to_numpy()
+                if len(patient_img_path_list)>1:
+                    self.patient_IDs.append(patient)                
 
         # labels = labels.set_index('CTCode')
         # labels = labels.loc[self.ID_list,['Dead','Follow-up Time','top_lung_location','bottom_lung_location']]
@@ -860,6 +865,9 @@ class IPFLongitudinalCTDataset(data.Dataset):
         #     patient_img_path_list = patient_img_path_list[0:1]
         else:
             patient_observed_time_points[0:len(patient_observed_time_points_temp)]=patient_observed_time_points_temp
+            # new_index = np.argsort(patient_observed_time_points)
+            # patient_observed_time_points=patient_observed_time_points[new_index]
+            # patient_img_path_list = patient_img_path_list[new_index]
         for i in range(len(patient_img_path_list)):
             processed_CT,processed_mask = self.preprosessing_CT(patient_img_path_list[i],patient_mask_path)
             processed_CTs[i,:]=processed_CT
