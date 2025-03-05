@@ -6,6 +6,23 @@ from .ode_func import ODEFunc
 from .diffeq_solver import DiffeqSolver
 from .utils import create_convnet,Tracker
 
+class CombineLatentEmbeddings(nn.Module):
+    def __init__(self, channels):
+        super(CombineLatentEmbeddings, self).__init__()
+        # First 3D convolution layer
+        self.conv1 = nn.Conv3d(channels * 2, channels * 2, kernel_size=3, stride=1, padding=1)
+        self.relu = nn.ReLU()
+        # Second 3D convolution layer to reduce back to original channel size
+        self.conv2 = nn.Conv3d(channels * 2, channels, kernel_size=3, stride=1, padding=1)
+
+    def forward(self, baseline, difference):
+        # Concatenate along the channel dimension (dim=1)
+        combined = torch.cat((baseline, difference), dim=1)  # [b, c*2, h, w, d]
+        out = self.conv1(combined)  # [b, c*2, h, w, d]
+        out = self.relu(out)
+        out = self.conv2(out)  # [b, c, h, w, d]
+        return out
+    
 class VidODE(nn.Module):
     
     def __init__(self, args, input_dim, device):
@@ -109,6 +126,7 @@ class VidODE(nn.Module):
                                           device=self.device)
         
         ##### Conv Decoder
+        # self.combination_layers = CombineLatentEmbeddings(channels=self.input_dim).to(self.device)
         if not self.args.flowmap :
             self.decoder = Decoder(input_dim=base_dim, output_dim=self.input_dim, n_ups=self.args.n_downs).to(self.device)
             if self.args.classification :
@@ -175,6 +193,10 @@ class VidODE(nn.Module):
             index_selected = (truth_time_steps*self.args.timepoints).long()
             pred_x = pred_x_all[0:pred_x_all.shape[0],index_selected,:]
             pred_x = pred_x[out_mask.squeeze(-1).bool(),:]
+            if b==1:
+                pred_x= pred_x.unsqueeze(0)
+            pred_intermediates_new = pred_x[:, 1:, ...] - pred_x[:, :-1, ...]
+            true_intermediates_new = truth[:, 1:, ...] - truth[:, :-1, ...]
         else:
             b, t, c, d, h, w  = sol_y_all.shape
             index_selected = (truth_time_steps*self.args.timepoints).long()
@@ -215,29 +237,56 @@ class VidODE(nn.Module):
             last_frame = skip_image.clone()
 
             if not self.args.residual:
-                warped_pred_x = self.get_warped_images_new(pred_flows=pred_flows, start_image=last_frame, grid=grid,residual = self.args.residual)
-                warped_pred_x = torch.cat(warped_pred_x, dim=1)  # regular b, t, 6, h, w / irregular b, t * ratio, 6, h, w
-                pred_x = pred_masks * warped_pred_x + (1 - pred_masks) * pred_intermediates
-                pred_x = pred_x[0:b,index_selected,:]
-                pred_x = pred_x[out_mask.squeeze(-1).bool(),...]
-                if b==1:
-                    pred_x= pred_x.unsqueeze(0)
-                pred_intermediates_new = pred_x[:, 1:, ...] - pred_x[:, :-1, ...]
-                true_intermediates_new = truth[:, 1:, ...] - truth[:, :-1, ...]
-                
-            else:
-                pred_x = pred_intermediates.clone()
-                pred_x = pred_x[0:b,index_selected,:]
-                pred_x = pred_x[out_mask.squeeze(-1).bool(),...]
-                # true_intermediates = pred_intermediates.clone()
-                if b==1:
-                    pred_x= pred_x.unsqueeze(0)
-                # truth = torch.cat([last_frame.unsqueeze(0),truth],dim=1)
+                # warped_pred_x = self.get_warped_images_new(pred_flows=pred_flows, start_image=last_frame, grid=grid,residual = self.args.residual)
+                # warped_pred_x = torch.cat(warped_pred_x, dim=1)  # regular b, t, 6, h, w / irregular b, t * ratio, 6, h, w
+                # pred_x = pred_masks * warped_pred_x + (1 - pred_masks) * pred_intermediates
+                # pred_x = pred_x[0:b,index_selected,:]
+                # pred_x = pred_x[out_mask.squeeze(-1).bool(),...]
+                # if b==1:
+                #     pred_x= pred_x.unsqueeze(0)
+                # pred_intermediates_new = pred_x[:, 1:, ...] - pred_x[:, :-1, ...]
+                # true_intermediates_new = truth[:, 1:, ...] - truth[:, :-1, ...]
+                pred_x = torch.zeros_like(pred_intermediates)
+                prev_frame = last_frame.clone()
                 for i in range(0,pred_x.shape[1]):
-                    pred_x[:,i,:] = last_frame + torch.sum(pred_intermediates[:,0:(index_selected[i]+1),:],dim=1)
-
+                    pred_x[:,i,:] = pred_masks[:,i,:]*prev_frame + (1-pred_masks[:,i,:])*pred_intermediates[:,i,:] 
+                    prev_frame = pred_x[:,i,:].clone()
+                pred_x = pred_x[0:b,index_selected,:]              
+                pred_x = pred_x[out_mask.squeeze(-1).bool(),...]
+                if b==1:
+                    pred_x= pred_x.unsqueeze(0)
                 pred_intermediates_new = pred_x[:, 1:, ...] - pred_x[:, :-1, ...]
-                true_intermediates_new = truth[:, 1:, ...] - truth[:, :-1, ...]
+                true_intermediates_new = truth[:, 1:, ...] - truth[:, :-1, ...]  
+
+            else:
+                add_combine=True
+                if add_combine:
+                    pred_x = torch.zeros_like(pred_intermediates)
+                    pred_x = pred_x[0:b,index_selected,:]
+
+                    # truth = torch.cat([last_frame.unsqueeze(0),truth],dim=1)
+                    for i in range(0,pred_x.shape[1]):
+                        pred_x[:,i,:] = last_frame + torch.sum(pred_intermediates[:,0:(index_selected[i]+1),:],dim=1)
+
+                    pred_intermediates_new = pred_x[:, 1:, ...] - pred_x[:, :-1, ...]
+                    true_intermediates_new = truth[:, 1:, ...] - truth[:, :-1, ...]
+                    pred_x = pred_x[out_mask.squeeze(-1).bool(),...]
+                    # true_intermediates = pred_intermediates.clone()
+                    if b==1:
+                        pred_x= pred_x.unsqueeze(0)
+                else:
+                    # true_intermediates_new = truth[:, 1:, ...] - truth[:, :-1, ...]
+                    pred_x = torch.zeros_like(pred_intermediates)
+                    prev_frame = last_frame.clone()
+                    for i in range(0,pred_x.shape[1]):
+                        pred_x[:,i,:] = self.combination_layers(prev_frame,pred_intermediates[:,i,:]) 
+                        prev_frame = pred_x[:,i,:].clone()
+                    pred_x = pred_x[0:b,index_selected,:]              
+                    pred_x = pred_x[out_mask.squeeze(-1).bool(),...]
+                    if b==1:
+                        pred_x= pred_x.unsqueeze(0)
+                    pred_intermediates_new = pred_x[:, 1:, ...] - pred_x[:, :-1, ...]
+                    true_intermediates_new = truth[:, 1:, ...] - truth[:, :-1, ...]                     
                     # true_intermediates[:,i,:] = truth[:,i+1,:]-truth[:,i,:]
                 
                     # if i==0:

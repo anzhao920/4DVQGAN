@@ -177,8 +177,38 @@ class Net2NetTransformer(pl.LightningModule):
         else:
             ValueError('conditional model %s is not implementated'%self.cond_stage_key)
 
+    def save_hist(self,input_tensor,patient_id,time_from_baseline,csv_filename,img_path):
+        import csv
+        # Step 1: Calculate the histogram
+        bins = 256  # Number of bins (0-255)
+        min_val = 0  # Minimum value for the histogram
+        max_val = 255  # Maximum value for the histogram
 
-    def forward(self, x, c, batch_idx,time_points=None, lung_masks=None, cbox=None,save_nii=False,all_time_points = False,patient_IDs=None,validation_mode='only_observed'):
+        # Calculate the histogram using torch.histc
+        hist = torch.histc(input_tensor.float(), bins=bins, min=min_val, max=max_val)
+
+        # Step 2: Prepare data for CSV
+        bin_counts = hist.tolist()  # Histogram counts for each bin
+
+        # Combine Patient ID and bin counts
+        data_row =[img_path]+[patient_id.cpu().item()] + [time_from_baseline.cpu().item()] + bin_counts  # Patient ID as the first column, followed by the bin counts
+
+        # Step 3: Write to CSV
+
+        # Check if file exists, and if not, create it and write headers
+        file_exists = os.path.isfile(csv_filename)
+
+        with open(csv_filename, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            if not file_exists:
+                # Header row includes Patient ID and Bin 0, Bin 1, ..., Bin 255
+                writer.writerow(['image path']+['Patient ID'] + ['time_from_baseline'] + [f'Bin {i}' for i in range(256)])
+            writer.writerow(data_row)
+
+
+        # print(f"Histogram data has been written to {csv_filename}")
+
+    def forward(self, x, c, batch_idx,time_points=None, lung_masks=None, cbox=None,save_nii=False,all_time_points = False,patient_IDs=None,validation_mode='only_observed',img_paths=None):
         print(patient_IDs)
         logits_list = []
         # logits_masked_list = []
@@ -205,11 +235,19 @@ class Net2NetTransformer(pl.LightningModule):
             # targets_list.append(z_indices.detach())
             temp_mask = repeat(latent_mask.bool(),'b t d h w->b (r t) d h w',r=z_indices.shape[1])[batch_dict['mask_predicted_data'].squeeze(-1).bool(),:]
             z_indices_target_flat = z_indices[batch_dict['mask_predicted_data'].squeeze(-1).bool(),:][temp_mask]
+
+            if validation_mode != "only_observed":
+                csv_file_path = validation_mode+'_histogram_target.csv'
+                for i in range(0,temp_mask.shape[0]):
+                    temp = z_indices[batch_dict['mask_predicted_data'].squeeze(-1).bool(),:][i,temp_mask[i,:]]
+                    self.save_hist(temp,patient_IDs[0],time_points[observed_time_mask.bool()][batch_dict['mask_predicted_data'].squeeze(-1).squeeze(0).bool()][i],csv_file_path,np.array(img_paths)[batch_dict['mask_predicted_data'].squeeze(-1).squeeze(0).bool()][i][0])
+
             # time_points_list.append(time_points[observed_time_mask.bool()])    
 
         
         logits,index_selected,true_intermediates,pred_intermediates = self.latentODE_model.compute_all_losses(batch_dict)
-        weights = torch.linspace(0.1, 1, steps=self.args.timepoints)
+        # weights = torch.linspace(0.1, 1, steps=self.args.timepoints)
+        weights = torch.linspace(1, 1, steps=self.args.timepoints)
         weights = weights[index_selected]
         b1,t1, c1, d1, h1, w1 = logits.shape
         weights = repeat(weights,'t->b t d h w c',b=b, d=d1,h=h1,w=w1,c=c1)
@@ -218,11 +256,13 @@ class Net2NetTransformer(pl.LightningModule):
         # logits = sol_y[batch_dict['mask_predicted_data'].squeeze(-1).bool(),:]
         logits = rearrange(logits,'b t c d h w->b t d h w c')
         logits_flat = logits[:,temp_mask,:]
-        true_intermediates = rearrange(true_intermediates,'b t c d h w->b t d h w c')
-        true_intermediates = true_intermediates[:,temp_mask[1:,:],:]
-        true_intermediates = true_intermediates.detach()
-        pred_intermediates = rearrange(pred_intermediates,'b t c d h w->b t d h w c')
-        pred_intermediates = pred_intermediates[:,temp_mask[1:,:],:]        
+
+        # true_intermediates = rearrange(true_intermediates,'b t c d h w->b t d h w c')
+        # true_intermediates = true_intermediates[:,temp_mask[1:,:],:]
+        # true_intermediates = true_intermediates.detach()
+        # pred_intermediates = rearrange(pred_intermediates,'b t c d h w->b t d h w c')
+        # pred_intermediates = pred_intermediates[:,temp_mask[1:,:],:]  
+
         # logits_list.append(logits_flat.detach())
         # if all_time_points:
         #     sol_y_list.append(sol_y_all[:,:,:,latent_mask.bool().squeeze()])
@@ -278,11 +318,23 @@ class Net2NetTransformer(pl.LightningModule):
             predicted_indices = torch.argmax(logits_maksed_all,dim=1)      
         # predicted_indices =  z_indices[0,temp_mask]
 
+        if validation_mode != "only_observed":
+            csv_file_path = validation_mode+'_histogram_predicted.csv'
+            predicted_indeices_with_outside = torch.zeros_like(z_indices[batch_dict['mask_predicted_data'].squeeze(-1).bool(),:])
+            predicted_indeices_with_outside[temp_mask]=predicted_indices
+            for i in range(0,temp_mask.shape[0]):
+                temp = predicted_indeices_with_outside[i,temp_mask[i,:]]
+                # self.save_hist(temp,patient_IDs[0],time_points[observed_time_mask.bool()][i],csv_file_path,img_paths[i])
+                self.save_hist(temp,patient_IDs[0],time_points[observed_time_mask.bool()][batch_dict['mask_predicted_data'].cpu().squeeze(-1).squeeze(0).bool()][i],csv_file_path,np.array(img_paths)[batch_dict['mask_predicted_data'].cpu().squeeze(-1).squeeze(0).bool()][i][0])
+
         baseline_indices =  z_indices[:,0,:].clone()
         baseline_indices = repeat(baseline_indices.unsqueeze(1),'b t c h w->b (r t) c h w',r=z_indices.shape[1])
-        # baseline_indices=baseline_indices[batch_dict['mask_predicted_data'].squeeze(-1).bool(),:]
+        baseline_indices=baseline_indices[batch_dict['mask_predicted_data'].squeeze(-1).bool(),:]
+        if b==1:
+            baseline_indices=baseline_indices.unsqueeze(0)
         baseline_indices[:,temp_mask]=predicted_indices
         predicted_indices = baseline_indices.clone()
+
         input_CTs = x[observed_time_mask.bool(),:][batch_dict['mask_predicted_data'].squeeze().bool(),:]
         reconstructed_CTs = torch.zeros(input_CTs.shape).cuda()
         lung_masks = repeat(lung_masks.bool(),'b t c h w->b (r t) c h w',r=z_indices.shape[1])[batch_dict['mask_predicted_data'].squeeze(-1).bool(),:]
@@ -314,9 +366,9 @@ class Net2NetTransformer(pl.LightningModule):
                     pixelNum_sum = pixelNum_sum+lung_masks[i].sum()
 
                     if save_nii:
-                        # niis=reconstructed_CTs[i,:]-(reconstructed_CTs[i,0,0,0]+0.5)
-                        # niis = torch.clamp(niis,-0.5,0.5)
-                        niis=reconstructed_CTs[i,:]
+                        niis=reconstructed_CTs[i,:]-(reconstructed_CTs[i,0,0,0]+0.5)
+                        niis = torch.clamp(niis,-0.5,0.5)
+                        # niis=reconstructed_CTs[i,:]
                         niis = niis.squeeze().cpu().numpy()
                         niis = niis.transpose(2,1,0)
                         niis = np.flip(niis,axis=1)
@@ -324,7 +376,7 @@ class Net2NetTransformer(pl.LightningModule):
                         mode = self.args.mode
                         image_type = 'predicted'
                         self.save_nii(self.logger.log_dir, mode,image_type,niis,
-                            patient_IDs[0], i)
+                            patient_IDs[0], time_points[0,i])
 
                         niis = input_CTs[i,:]
                         niis = niis.squeeze().cpu().numpy()
@@ -334,14 +386,14 @@ class Net2NetTransformer(pl.LightningModule):
                         mode = self.args.mode
                         image_type = 'target'
                         self.save_nii(self.logger.log_dir, mode,image_type,niis,
-                            patient_IDs[0], i)                
+                            patient_IDs[0], time_points[0,i])                
         
                     ms_ssim_sum = ms_ssim_sum+ms_ssim(padding(reconstructed_CTs[i:i+1].unsqueeze(0)), padding(input_CTs[i:i+1].unsqueeze(0)), data_range=1, size_average=False) 
                     # MS is too high
           
         # ssim_step = ssim_sum
         # psnr_step = psnr_sum
-        # mse_step = mse_loss_sum
+        # mse_step = mse_sum
     
 
          
@@ -470,16 +522,18 @@ class Net2NetTransformer(pl.LightningModule):
                 observed_mask[b,:,:]=False
                 observed_mask[b,0,:]=True
                 observed_mask[b,pos,:]=True
-                mask_predicted_data[b,0,:] = False
-                mask_predicted_data[b,pos,:] = False
+                # mask_predicted_data[b,0,:] = False
+                # mask_predicted_data[b,pos,:] = False
 
             # data_to_predict[~(mask_predicted_data.squeeze(-1)),:]=0 
             data_to_predict = observed_data.clone()          
             observed_data[~(observed_mask.squeeze(-1).bool()),:]=0
-            for i in range(0,observed_data.shape[1]):
-                observed_data[0,i,:]= observed_data[0,0,:]+(observed_data[0,observed_data.shape[1]-1,:]-observed_data[0,0,:])/time_steps[-1]*time_steps[i]
-            # for i in range(1,observed_data.shape[1]-1):
-            #     observed_data[0,i,:]= observed_data[0,0,:]
+            # observed_data[b,:,:,~(latent_mask[b,0,:].bool())] = 0
+            # data_to_predict[b,:,:,~(latent_mask[b,0,:].bool())] = 0
+            # for i in range(0,observed_data.shape[1]):
+            #     observed_data[0,i,:]= observed_data[0,0,:]+(observed_data[0,observed_data.shape[1]-1,:]-observed_data[0,0,:])/time_steps[-1]*time_steps[i]
+            # # for i in range(1,observed_data.shape[1]-1):
+            # #     observed_data[0,i,:]= observed_data[0,0,:]
 
             for b in range(0,observed_time_mask.shape[0]):
                 observed_data[b,:,:,~(latent_mask[b,0,:].bool())] = 0
@@ -496,15 +550,47 @@ class Net2NetTransformer(pl.LightningModule):
                 observed_mask[b,pos[0:2]]=True
                 # mask_predicted_data[b,0:2,:]=False
                 # observed_mask[b,2:]=False
+            data_to_predict = observed_data.clone()          
+            observed_data[~(observed_mask.squeeze(-1).bool()),:]=0
+            # observed_data[b,:,:,~(latent_mask[b,0,:].bool())] = 0
+            # data_to_predict[b,:,:,~(latent_mask[b,0,:].bool())] = 0
 
+            # for i in range(2,observed_data.shape[1]):
+            #     observed_data[0,i,:]= observed_data[0,1,:]+(observed_data[0,1,:]-observed_data[0,0,:])/time_steps[1]*(time_steps[i]-time_steps[1])
+            # observed_data = rearrange(observed_data,'b t c d h w -> (b t) c d h w')
+            # observed_data = self.first_stage_model.codebook(observed_data)['embeddings']
+            # observed_data = rearrange(observed_data,'(b t) c d h w -> b t c d h w',b=observed_time_mask.shape[0])
 
-            data_to_predict = observed_data.clone()  
-            observed_data[~(observed_mask.squeeze(-1).bool()),:]=0  
-            for i in range(2,observed_data.shape[1]):
-                observed_data[0,i,:]= observed_data[0,1,:]+(observed_data[0,1,:]-observed_data[0,0,:])/time_steps[1]*(time_steps[i]-time_steps[1])
-            observed_data = rearrange(observed_data,'b t c d h w -> (b t) c d h w')
-            observed_data = self.first_stage_model.codebook(observed_data)['embeddings']
-            observed_data = rearrange(observed_data,'(b t) c d h w -> b t c d h w',b=observed_time_mask.shape[0])
+            for b in range(0,observed_time_mask.shape[0]):
+                observed_data[b,:,:,~(latent_mask[b,0,:].bool())] = 0
+                data_to_predict[b,:,:,~(latent_mask[b,0,:].bool())] = 0 
+
+        elif self.mode == 'generation': 
+            mask_predicted_data = observed_mask.clone()
+            for b in range(0,observed_time_mask.shape[0]):
+                observed_data[b,observed_mask.squeeze(-1).bool()[b,:],:]=vq_embeddings[b,observed_time_mask[b,:].bool(),:]
+                z_indices_combined[b,observed_mask.squeeze(-1).bool()[b,:],:]=z_indices[b,observed_time_mask[b,:].bool(),:]
+                # pos = torch.where(observed_mask[b,:,:]==True)[0]
+                idx = torch.where(time_steps==4.0)[0]              
+                # mask_predicted_data[b,pos[0:2],:]=False
+                observed_mask[b,:,:]=False
+                observed_mask[b,0:(idx+1)]=True
+                # observed_mask[b,idx]=True
+                # mask_predicted_data[b,0:2,:]=False
+                # observed_mask[b,2:]=False
+
+            data_to_predict = observed_data.clone() 
+            for i in range(0,idx):
+                observed_data[0,i,:]= observed_data[0,0,:]+(observed_data[0,idx,:]-observed_data[0,0,:])/time_steps[idx]*time_steps[i]                   
+            observed_data[~(observed_mask.squeeze(-1).bool()),:]=0
+            # observed_data[b,:,:,~(latent_mask[b,0,:].bool())] = 0
+            # data_to_predict[b,:,:,~(latent_mask[b,0,:].bool())] = 0
+
+            # for i in range(2,observed_data.shape[1]):
+            #     observed_data[0,i,:]= observed_data[0,1,:]+(observed_data[0,1,:]-observed_data[0,0,:])/time_steps[1]*(time_steps[i]-time_steps[1])
+            # observed_data = rearrange(observed_data,'b t c d h w -> (b t) c d h w')
+            # observed_data = self.first_stage_model.codebook(observed_data)['embeddings']
+            # observed_data = rearrange(observed_data,'(b t) c d h w -> b t c d h w',b=observed_time_mask.shape[0])
 
             for b in range(0,observed_time_mask.shape[0]):
                 observed_data[b,:,:,~(latent_mask[b,0,:].bool())] = 0
@@ -519,6 +605,9 @@ class Net2NetTransformer(pl.LightningModule):
             observed_data[~(observed_mask.squeeze(-1).bool()),:]=0  
             for b in range(0,observed_time_mask.shape[0]):
                 observed_data[b,:,:,~(latent_mask[b,0,:].bool())] = 0
+                # mask_propotion = -1
+                # mask = torch.rand(observed_data.shape[1], 1,observed_data.shape[3], observed_data.shape[4], observed_data.shape[5]) > mask_propotion
+                # observed_data[b,:] *= mask.cuda()
                 data_to_predict[b,:,:,~(latent_mask[b,0,:].bool())] = 0    
 
         elif self.mode == 'one-year':
@@ -667,18 +756,20 @@ class Net2NetTransformer(pl.LightningModule):
         x, c,time_points = self.get_xc(batch)
         lung_masks = batch['longitudianl_lung_masks']
         patient_IDs = batch['patientID']
+        img_paths = batch['patient_img_path_list']
         if self.args.vtokens_pos:
             cbox = batch['cbox']
         else:
             cbox = None
         # print('train:', x.min(), x.max(), x.shape, c)
-        logits, target, target_embedding,ssim_sum,psnr_sum,mse_sum,pixelNum_sum,weights_flat,pred_intermediates,true_intermediates = self(x, c, batch_idx,time_points, lung_masks,cbox,save_nii,all_time_points,patient_IDs,validation_mode)
+        logits, target, target_embedding,ssim_sum,psnr_sum,mse_sum,pixelNum_sum,weights_flat,pred_intermediates,true_intermediates = self(x, c, batch_idx,time_points, lung_masks,cbox,save_nii,all_time_points,patient_IDs,validation_mode,img_paths)
         logits = logits.squeeze(0)
         if not all_time_points:
             if not self.args.classification:
                 # loss = F.mse_loss(logits, target_embedding)
                 weights_flat=weights_flat.cuda()
-                loss = F.mse_loss(logits*weights_flat, target_embedding*weights_flat)+F.mse_loss(pred_intermediates, true_intermediates)
+                loss = F.mse_loss(logits*weights_flat, target_embedding*weights_flat)
+                # loss = F.mse_loss(logits*weights_flat, target_embedding*weights_flat)+F.mse_loss(pred_intermediates, true_intermediates)
                 flat_inputs = logits
                 distances = (flat_inputs ** 2).sum(dim=1, keepdim=True) \
                             - 2 * flat_inputs @ self.first_stage_model.codebook.embeddings.t() \
@@ -712,9 +803,9 @@ class Net2NetTransformer(pl.LightningModule):
         self.log("train/loss", loss.detach().item(), prog_bar=True, logger=True, on_step=True, on_epoch=True)
         self.log('train/acc1', acc1.detach().item(), prog_bar=True, logger=True, on_step=True, on_epoch=True)
         self.log('train/acc5', acc5.detach().item(), prog_bar=True, logger=True, on_step=True, on_epoch=True)
-        self.log('train/ssim', ssim_sum/pixelNum_sum, prog_bar=True, logger=True, on_step=True, on_epoch=True)
-        self.log('train/psnr', psnr_sum/pixelNum_sum, prog_bar=True, logger=True, on_step=True, on_epoch=True)
-        self.log('train/mse', mse_sum/pixelNum_sum, prog_bar=True, logger=True, on_step=True, on_epoch=True)
+        # self.log('train/ssim', ssim_sum/pixelNum_sum, prog_bar=True, logger=True, on_step=True, on_epoch=True)
+        # self.log('train/psnr', psnr_sum/pixelNum_sum, prog_bar=True, logger=True, on_step=True, on_epoch=True)
+        # self.log('train/mse', mse_sum/pixelNum_sum, prog_bar=True, logger=True, on_step=True, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -728,8 +819,8 @@ class Net2NetTransformer(pl.LightningModule):
         return loss
 
     def test_step(self, batch, batch_idx):
-        # if (batch['patientID']!=457):
-        #     return
+        if (batch['patientID']!=420):
+            return
         # loss, acc1, acc5 =self.shared_step(batch, batch_idx,save_nii=False,all_time_points=True)
         # print(loss)
         # loss, acc1, acc5,ssim_step,psnr_step,mse_step = self.shared_step(batch, batch_idx,save_nii=False,all_time_points=True)
@@ -741,6 +832,22 @@ class Net2NetTransformer(pl.LightningModule):
         # self.psnr_sum_list.append(psnr_sum.detach().cpu())
         # self.mse_sum_list.append(mse_sum.detach().cpu())
         # self.pixelNum_sum_list.append(pixelNum_sum.detach().cpu())
+
+    def predict_step(self, batch, batch_idx):
+        # if (batch['patientID']!=457):
+        #     return
+        # loss, acc1, acc5 =self.shared_step(batch, batch_idx,save_nii=False,all_time_points=True)
+        # print(loss)
+        # loss, acc1, acc5,ssim_step,psnr_step,mse_step = self.shared_step(batch, batch_idx,save_nii=False,all_time_points=True)
+        loss, acc1, acc5,ssim_sum,psnr_sum,mse_sum,pixelNum_sum = self.shared_step(batch, batch_idx,save_nii=False,validation_mode="test_dataset")
+        self.loss_list.append(loss.detach().cpu())
+        self.acc1_sum_list.append((acc1*pixelNum_sum).detach().cpu())
+        self.acc5_sum_list.append((acc5*pixelNum_sum).detach().cpu())
+        # self.ssim_sum_list.append(ssim_sum.detach().cpu())
+        # self.psnr_sum_list.append(psnr_sum.detach().cpu())
+        # self.mse_sum_list.append(mse_sum.detach().cpu())
+        # self.pixelNum_sum_list.append(pixelNum_sum.detach().cpu())
+
 
 
         

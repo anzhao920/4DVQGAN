@@ -79,12 +79,12 @@ def main():
     args.external_mask_path = 'Leuven_IPF_registered_mask'
     args.external_label_path = 'Leuven_data_label.csv'
     args.max_longitudinal_CT=10
-    args.mode = 'reconstruction'
+    args.mode = 'generation'
     args.classification = False
     args.residual = True
     args.ode_rnn = False
     args.time_window_max = 365.25*6
-    args.timepoints = round(args.time_window_max/90)+1
+    args.timepoints = round(args.time_window_max/182.5)+1
     args.downsample_latent = False
     args.flowmap = True
     args.run_backwards = True
@@ -144,13 +144,17 @@ def main():
 
     trainer = pl.Trainer.from_argparse_args(args, callbacks=callbacks,
                                             max_steps=args.max_steps,**kwargs)
+    # trainer = pl.Trainer.from_argparse_args(args, callbacks=callbacks,
+    #                                         max_steps=args.max_steps,**kwargs,resume_from_checkpoint='./transformer_experiment_1/lightning_logs/loss=2.58.ckpt')
+
     print(trainer.logger.log_dir)
     # trainer.fit(model, data)
     
-    model_path = "./transformer_experiment_1/lightning_logs/best_checkpoint_train_loss_old.ckpt"
+    model_path = "./transformer_experiment_1/lightning_logs/loss=2.58.ckpt"
     model = Net2NetTransformer.load_from_checkpoint(model_path,args=args)
     model.eval()
     trainer.test(model, data)
+    # trainer.predict(model, data)
     pixelNum_sum = np.stack(model.pixelNum_sum_list).sum()
     print('model_path: ',model_path)
     print('test mode: ',args.mode)

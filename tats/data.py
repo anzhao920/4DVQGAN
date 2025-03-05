@@ -353,7 +353,7 @@ class VideoData(pl.LightningDataModule):
         return self.val_dataloader()
     
     def predict_dataloader(self):
-        return self.val_dataloader()    
+        return self._dataloader(False)  
 
 
     @staticmethod
@@ -768,20 +768,34 @@ class IPFLongitudinalCTDataset(data.Dataset):
         if self.mode == 'interpolation':
             for patient in patients:
                 patient_img_path_list = self.labels[self.labels.patient_id==patient]['image_path'].to_numpy()
+                patient_observed_time_points = round(self.labels[self.labels.patient_id==patient]['time_from_baseline']/182.5).to_numpy()
+                patient_img_path_list=np.unique(patient_observed_time_points)
                 if len(patient_img_path_list)>2:
                     self.patient_IDs.append(patient)
         elif self.mode == 'extrapolation':
             for patient in patients:
                 patient_img_path_list = self.labels[self.labels.patient_id==patient]['image_path'].to_numpy()
+                patient_observed_time_points = round(self.labels[self.labels.patient_id==patient]['time_from_baseline']/182.5).to_numpy()
+                patient_img_path_list=np.unique(patient_observed_time_points)
                 if len(patient_img_path_list)>2:
+                    self.patient_IDs.append(patient)
+        elif self.mode == 'generation':
+            for patient in patients:
+                patient_img_path_list = self.labels[self.labels.patient_id==patient]['image_path'].to_numpy()
+                patient_observed_time_points = round(self.labels[self.labels.patient_id==patient]['time_from_baseline']/182.5).to_numpy()
+                patient_img_path_list=np.unique(patient_observed_time_points)
+                if len(patient_img_path_list)>4 and 4.0 in patient_observed_time_points:
                     self.patient_IDs.append(patient)
         elif self.mode == 'reconstruction' or self.mode=='one-year':
             for patient in patients:
                 patient_img_path_list = self.labels[self.labels.patient_id==patient]['image_path'].to_numpy()
-                self.patient_IDs.append(patient)  
+                if len(patient_img_path_list)>1:
+                    self.patient_IDs.append(patient)    
         elif self.mode == 'mixed':
             for patient in patients:
                 patient_img_path_list = self.labels[self.labels.patient_id==patient]['image_path'].to_numpy()
+                patient_observed_time_points = round(self.labels[self.labels.patient_id==patient]['time_from_baseline']/182.5).to_numpy()
+                patient_img_path_list=np.unique(patient_observed_time_points)
                 if len(patient_img_path_list)>1:
                     self.patient_IDs.append(patient)                
 
@@ -848,7 +862,13 @@ class IPFLongitudinalCTDataset(data.Dataset):
         patient_observed_time_points.fill(np.nan)
         patient_img_path_list = self.labels[self.labels.patient_id==patient]['image_path'].to_numpy()
         patient_mask_path = self.labels[self.labels.patient_id==patient]['mask_path'].to_numpy()[0]
-        patient_observed_time_points_temp = round(self.labels[self.labels.patient_id==patient]['time_from_baseline']/90).to_numpy()
+        patient_observed_time_points_temp = round(self.labels[self.labels.patient_id==patient]['time_from_baseline']/182.5).to_numpy()
+
+        _, indices_of_unique_values = np.unique(patient_observed_time_points_temp, return_index=True)
+        patient_img_path_list = patient_img_path_list[indices_of_unique_values]
+        patient_observed_time_points_temp = patient_observed_time_points_temp[indices_of_unique_values]
+
+
         processed_CTs = torch.zeros(self.max_longitudinal_CT,self.input_D,self.outputWidth,self.outputWidth)
         if len(patient_img_path_list)>self.max_longitudinal_CT:
             # index = np.random.choice(range(len(patient_img_path_list)),self.max_longitudinal_CT,replace=False)
@@ -871,7 +891,7 @@ class IPFLongitudinalCTDataset(data.Dataset):
         for i in range(len(patient_img_path_list)):
             processed_CT,processed_mask = self.preprosessing_CT(patient_img_path_list[i],patient_mask_path)
             processed_CTs[i,:]=processed_CT
-        return {'longitudianl_CT_scans':processed_CTs,'longitudianl_lung_masks':processed_mask,'observed_time_points':patient_observed_time_points,'patientID':patient}
+        return {'longitudianl_CT_scans':processed_CTs,'longitudianl_lung_masks':processed_mask,'observed_time_points':patient_observed_time_points,'patientID':patient,'patient_img_path_list':list(patient_img_path_list)}
 
     
     def preprosessing_CT(self,img_path,mask_path):
