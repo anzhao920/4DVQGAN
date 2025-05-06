@@ -89,7 +89,7 @@ predicted_df = filter_patient_for_longitudinal_analysis(predicted_df)
 # Selected features (indices) for the biomarkers
 # bin_indices = [196,238,204,229,128,251,85,197,194,182]
 # bin_indices = [196,128,85,194,182]
-bin_indices = [196,238,204,229,128]
+bin_indices = [128,129,238,196,97]
 # bin_indices = [196]
 selected_features = [f"Bin_{bin_index}_proportion" for bin_index in bin_indices]
 true_biomarkers = true_df.loc[:, selected_features]

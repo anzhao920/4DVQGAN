@@ -1,17 +1,19 @@
-import pandas as pd
+import pandas as pd 
 from lifelines import CoxPHFitter
 from lifelines.utils import concordance_index
 import numpy as np
+from sklearn.model_selection import KFold
 
 # Load your CSV file into a pandas DataFrame
 df = pd.read_csv("C:\\My Data\\Leuven\\training_dataset_histogram_target.csv")
+df = df[df["time_from_baseline"] == 0]
 
 # Define the outcome and covariates
 outcome_col = "dead"  # Mortality column (1 or 0)
 covariates = ['sex', 'age', 'smoking', 'follow up time']  # Other covariates
 
-# Prepare a dataframe to store the p-values and C-index values for each feature (Bin 0 - Bin 255)
-results = pd.DataFrame(columns=["Bin", "P-value", "C-index", "Hazard Ratio"])
+# Prepare a dataframe to store the p-values, C-index values, and Hazard Ratios for each fold
+results = pd.DataFrame(columns=["Fold", "Bin", "P-value", "Train C-index", "Test C-index", "Hazard Ratio"])
 
 # Initialize Cox Proportional Hazards model
 cph = CoxPHFitter()
@@ -27,77 +29,104 @@ for i in range(256):
     bin_column = f"Bin {i}"
     df[f"Bin {i}_proportion"] = df[bin_column] / df['total_bins']
 
+# Initialize 5-fold cross-validation
+kf = KFold(n_splits=5, shuffle=True, random_state=42)
+
+# Store biomarkers that pass the criteria across all folds
+biomarkers_passed_all_tests = []
+
 # Loop through each Bin feature (from Bin 0 to Bin 255)
 for i in range(256):
-    # Create a model with the current Bin feature and the covariates
     feature_col = f"Bin {i}_proportion"
 
-    # Prepare the feature and covariates for the Cox model
+    # Skip the bin if the feature value is less than 0.00001
+    if df[feature_col].mean() < 0.00001:
+        continue  # Skip this feature if its mean value is less than 0.00001
+    
     model_data = df[[outcome_col, feature_col] + covariates].dropna()
+
+
+    # Initialize lists to store C-index values, p-values, and hazard ratios for each fold
+    train_c_index_values = []
+    test_c_index_values = []
+    fold_p_values = []
+    fold_hazard_ratios = []
     
-    # Fit the Cox model
-    cph.fit(model_data, duration_col="follow up time", event_col=outcome_col)
+    # Cross-validation loop
+    passed = True  # A flag to check if all conditions are met for this feature
+    for fold, (train_index, test_index) in enumerate(kf.split(model_data), 1):
+        # Split data into training and testing sets based on KFold indices
+        train_data = model_data.iloc[train_index]
+        test_data = model_data.iloc[test_index]
+
+        # Fit the Cox model on the training data
+        cph.fit(train_data, duration_col="follow up time", event_col=outcome_col)
+
+        # Get the p-value for the current feature in the fold
+        fold_p_value = cph.summary.loc[feature_col, "p"]
+        fold_p_values.append(fold_p_value)
+
+        # Get the Hazard Ratio for the current feature in the fold
+        fold_hazard_ratio = np.exp(cph.params_[feature_col])  # Exponentiate the coefficient to get the hazard ratio
+        fold_hazard_ratios.append(fold_hazard_ratio)
+
+        # Calculate the C-index on the training data
+        train_c_index = concordance_index(train_data['follow up time'], -cph.predict_partial_hazard(train_data), train_data[outcome_col])
+        train_c_index_values.append(train_c_index)
+
+        # Calculate the C-index on the test data
+        test_c_index = concordance_index(test_data['follow up time'], -cph.predict_partial_hazard(test_data), test_data[outcome_col])
+        test_c_index_values.append(test_c_index)
+
+        # Check if conditions are met for p-value, hazard ratio, and C-index
+        if fold_p_value >= 0.05 or fold_hazard_ratio <= 1 or test_c_index <= 0.5:
+            passed = False
+            break  # No need to check further folds if one fold fails the criteria
     
-    # Get the p-value for the current feature
-    p_value = cph.summary.loc[feature_col, "p"]
+    # If the feature passes the criteria for all folds, store its results
+    if passed:
+        avg_train_c_index = np.mean(train_c_index_values)
+        avg_test_c_index = np.mean(test_c_index_values)
+        avg_p_value = np.mean(fold_p_values)
+        avg_hazard_ratio = np.mean(fold_hazard_ratios)
 
-    # Get the Hazard Ratio for the current feature
-    hazard_ratio = np.exp(cph.params_[feature_col])  # Exponentiate the coefficient to get the hazard ratio
+        # Append the feature that passed all tests
+        biomarkers_passed_all_tests.append({
+            "Bin": feature_col,
+            "Avg P-value": avg_p_value,
+            "Avg Train C-index": avg_train_c_index,
+            "Avg Test C-index": avg_test_c_index,
+            "Avg Hazard Ratio": avg_hazard_ratio
+        })
+        
+        # Append fold-specific results to the results DataFrame
+        for fold in range(1, 6):
+            results = results.append({
+                "Fold": fold,
+                "Bin": feature_col,
+                "P-value": fold_p_values[fold-1],
+                "Train C-index": train_c_index_values[fold-1],
+                "Test C-index": test_c_index_values[fold-1],
+                "Hazard Ratio": fold_hazard_ratios[fold-1]
+            }, ignore_index=True)
 
-    # Calculate the C-index for the current model
-    # We use the concordance_index function from lifelines for this
-    c_index = concordance_index(model_data['follow up time'], -cph.predict_partial_hazard(model_data), model_data[outcome_col])
-    
-    # Append the results to the results DataFrame
-    results = results.append({"Bin proportion": feature_col, "P-value": p_value, "C-index": c_index, "Hazard Ratio": hazard_ratio}, ignore_index=True)
+# Convert biomarkers that passed the test into a DataFrame
+biomarkers_df = pd.DataFrame(biomarkers_passed_all_tests)
 
-# Filter for significant features (p-value < 0.01)
-significant_results = results[results["P-value"] < 0.01]
-significant_results = significant_results[significant_results["Hazard Ratio"] > 1]
+# Sort biomarkers by Avg Test C-index in descending order
+biomarkers_df_sorted = biomarkers_df.sort_values(by="Avg Test C-index", ascending=False)
 
-# Save the results to a CSV file
-results.to_csv("cox_model_results.csv", index=False)
+# Select the top 5 biomarkers
+top_5_biomarkers = biomarkers_df_sorted.head(5)
 
-# Save the significant results (p-value < 0.01 and Hazard Ratio > 1)
-significant_results.to_csv("significant_cox_model_results.csv", index=False)
+# Compute the correlation matrix among the top 5 biomarkers' proportions
+top_5_columns = [biomarker for biomarker in top_5_biomarkers["Bin"]]
+correlation_matrix = df[top_5_columns].corr()
 
-print("Results have been saved to 'cox_model_results.csv' and 'significant_cox_model_results.csv'.")
+# Save the results to CSV files
+results.to_csv("cox_model_results_cv_with_train_test_cindex_and_hazard_ratio.csv", index=False)
+biomarkers_df.to_csv("biomarkers_passed_all_tests.csv", index=False)
+top_5_biomarkers.to_csv("top_5_biomarkers.csv", index=False)
+correlation_matrix.to_csv("correlation_matrix_top_5_biomarkers.csv", index=True)
 
-# --- Now select the top 10 features based on p-value and refit the final model ---
-
-# Sort the significant results by p-value and select the top 10 features
-top_10_features = significant_results.sort_values(by="P-value").head(10)
-
-# Extract the feature names (Bin proportion columns)
-selected_features = ["Bin proportion"].values
-
-# Define the final model with the top 10 features
-final_covariates = list(selected_features) + covariates  # Add the selected features to the list of covariates
-
-# Prepare the final dataset with only the selected features and covariates
-final_model_data = df[[outcome_col] + final_covariates].dropna()
-
-# Fit the Cox model with the top 10 features
-cph.fit(final_model_data, duration_col="follow up time", event_col=outcome_col)
-
-# Calculate the C-index for the final model
-c_index_final = concordance_index(final_model_data['follow up time'], -cph.predict_partial_hazard(final_model_data), final_model_data[outcome_col])
-
-print("C-index of the final model with the top 10 features:", c_index_final)
-
-# --- Now use all 256 features and the covariates to predict survival and calculate C-index ---
-
-# Prepare the dataset with all the 256 features and covariates
-# all_features = [f"Bin {i}_proportion" for i in range(256)]  # Using the proportions of Bin 0 - Bin 255
-# final_covariates_all = all_features + covariates  # Add covariates as well
-
-# # Prepare the final dataset with all features
-# final_model_data_all = df[[outcome_col] + final_covariates_all].dropna()
-
-# # Fit the Cox model with all 256 features
-# cph.fit(final_model_data_all, duration_col="follow up time", event_col=outcome_col)
-
-# # Calculate the C-index for the final model with all 256 features
-# c_index_final_all = concordance_index(final_model_data_all['follow up time'], -cph.predict_partial_hazard(final_model_data_all), final_model_data_all[outcome_col])
-
-# print("C-index of the final model with all 256 features:", c_index_final_all)
+print("Results have been saved to 'cox_model_results_cv_with_train_test_cindex_and_hazard_ratio.csv', 'biomarkers_passed_all_tests.csv', 'top_5_biomarkers.csv', and 'correlation_matrix_top_5_biomarkers.csv'.")
