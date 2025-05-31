@@ -121,10 +121,7 @@ class Encoder_z0_ODE_ConvGRU(nn.Module):
     
         if not self.batch_first:
             # (t, b, c, h, w) -> (b, t, c, h, w)
-            input_tensor = input_tensor.permute(1, 0, 2, 3, 4, 5)
-        
-        # assert (input_tensor.size(1) == len(time_steps)), "Sequence length should be same as time_steps"
-        
+            input_tensor = input_tensor.permute(1, 0, 2, 3, 4, 5)        
         last_yi, latent_ys = self.run_ode_conv_gru(
             input_tensor=input_tensor,
             mask=mask,
@@ -144,7 +141,6 @@ class Encoder_z0_ODE_ConvGRU(nn.Module):
         b, t, c, d, h, w  = input_tensor.size()
         
         device = get_device(input_tensor)
-        # time_steps = time_steps[mask.bool()[:,:,0]]
         # Set initial inputs
         for batch_idx in range(0,b):
             # hidden state
@@ -194,10 +190,6 @@ class Encoder_z0_ODE_ConvGRU(nn.Module):
                 prev_t, t_i = batch_time_steps[i], batch_time_steps[i - 1]
             yi_allbatch.append(yi)
         yi_allbatch = torch.cat(yi_allbatch, 0)
-                # latent_ys.append(yi)
-            # latent_ys is not used
-            # latent_ys = torch.stack(latent_ys, 1)
-        # latent_ys = torch.stack(latent_ys, 1)
         
         return yi_allbatch, latent_ys
     
@@ -262,14 +254,8 @@ class Decoder(nn.Module):
             model += [get_norm_layer(ch // 2)]
             model += [nn.ReLU()]
             ch = ch // 2
-
-        # model += [nn.Conv3d(ch, ch // 2, 3, 1, 1)]
-        # model += [get_norm_layer(ch // 2)]
-        # model += [nn.ReLU()]
-        # ch = ch // 2        
-        model += [nn.Conv3d(ch, output_dim, 3, 1, 1)]
-        # model += [nn.Tanh()]
-        
+      
+        model += [nn.Conv3d(ch, output_dim, 3, 1, 1)]       
         self.model = nn.Sequential(*model)
     
     def forward(self, x):

@@ -220,7 +220,6 @@ class VQGAN(pl.LightningModule):
 
     def log_images(self, batch, **kwargs):
         log = dict()
-        # x = batch['video']
         x = batch[0]        
         x = x.to(self.device)
         frames, frames_rec, _, _ = self(x, log_image=True)
@@ -230,7 +229,6 @@ class VQGAN(pl.LightningModule):
 
     def log_videos(self, batch, **kwargs):
         log = dict()
-        # x = batch['video']
         x = batch[0]
         _, _, x, x_rec = self(x, log_image=True)
         log["inputs"] = x
@@ -268,7 +266,6 @@ def Normalize(in_channels, norm_type='group'):
     if norm_type == 'group':
         return torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
     elif norm_type == 'batch':
-        # return torch.nn.SyncBatchNorm(in_channels)
         return torch.nn.BatchNorm3d(in_channels)
 
 
@@ -426,7 +423,6 @@ class SamePadConvTranspose3d(nn.Module):
 
         
 class NLayerDiscriminator(nn.Module):
-    # def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.SyncBatchNorm, use_sigmoid=False, getIntermFeat=True):
     def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d, use_sigmoid=False, getIntermFeat=True):
         super(NLayerDiscriminator, self).__init__()
         self.getIntermFeat = getIntermFeat
@@ -481,7 +477,6 @@ class NLayerDiscriminator(nn.Module):
 
 
 class NLayerDiscriminator3D(nn.Module):
-    # def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.SyncBatchNorm, use_sigmoid=False, getIntermFeat=True):
     def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm3d, use_sigmoid=False, getIntermFeat=True):
         super(NLayerDiscriminator3D, self).__init__()
         self.getIntermFeat = getIntermFeat

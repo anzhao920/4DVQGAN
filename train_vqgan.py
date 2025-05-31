@@ -4,8 +4,8 @@ import os
 import argparse
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
-from tats import VQGAN, VideoData
-from tats.modules.callbacks import ImageLogger, VideoLogger
+from model.vqgan_3d import VQGAN, VideoData
+from model.modules.callbacks import ImageLogger, VideoLogger
 from pytorch_lightning import loggers as pl_loggers
 def main():
     pl.seed_everything(1234)
@@ -70,35 +70,11 @@ def main():
     kwargs = dict()
     if args.gpus > 1:
         kwargs = dict(distributed_backend='ddp', gpus=args.gpus)
-    # tb_logger = pl_loggers.TensorBoardLogger(save_dir=args.default_root_dir+"lightning_logs/",name = args.arch,version=f"fold_{0}")
-    # # load the most recent checkpoint file
-    # base_dir = os.path.join(args.default_root_dir, 'lightning_logs')
-    # if os.path.exists(base_dir):
-    #     log_folder = ckpt_file = ''
-    #     version_id_used = step_used = 0
-    #     for folder in os.listdir(base_dir):
-    #         version_id = int(folder.split('_')[1])
-    #         if version_id > version_id_used:
-    #             version_id_used = version_id
-    #             log_folder = folder
-    #     if len(log_folder) > 0:
-    #         ckpt_folder = os.path.join(base_dir, log_folder, 'checkpoints')
-    #         for fn in os.listdir(ckpt_folder):
-    #             if fn == 'latest_checkpoint.ckpt':
-    #                 ckpt_file = 'latest_checkpoint_prev.ckpt'
-    #                 os.rename(os.path.join(ckpt_folder, fn), os.path.join(ckpt_folder, ckpt_file))
-    #         if len(ckpt_file) > 0:
-    #             args.resume_from_checkpoint = os.path.join(ckpt_folder, ckpt_file)
-    #             print('will start from the recent ckpt %s'%args.resume_from_checkpoint)
-
     
     trainer = pl.Trainer.from_argparse_args(args, callbacks=callbacks,
                                             precision=16,**kwargs)
 
     trainer.fit(model, data)
-    # model = VQGAN.load_from_checkpoint("./experiment6/lightning_logs/version_0/checkpoints/latest_checkpoint-v1.ckpt")
-    # model.eval()
-    # predictions = trainer.predict(model, data)
 
 
 if __name__ == '__main__':

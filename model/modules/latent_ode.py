@@ -20,7 +20,6 @@ from torch.distributions.multivariate_normal import MultivariateNormal
 from torch.distributions.normal import Normal
 from torch.distributions import kl_divergence, Independent
 from .base_models import VAE_Baseline
-# from .flow_transformer import FlowTransformerEncoder
 
 
 class LatentODE(VAE_Baseline):
@@ -63,18 +62,6 @@ class LatentODE(VAE_Baseline):
 			means_z0 = first_point_mu.repeat(n_traj_samples, 1, 1)
 			sigma_z0 = first_point_std.repeat(n_traj_samples, 1, 1)
 			first_point_enc = means_z0
-			# first_point_enc = sample_standard_gaussian(means_z0, sigma_z0)
-
-		elif isinstance(self.encoder_z0,FlowTransformerEncoder):
-			truth_w_mask = truth
-			if mask is not None:
-				truth_w_mask = torch.cat((truth, mask), -1)
-			first_point_mu, first_point_std = self.encoder_z0(
-				truth_w_mask, truth_time_steps)
-
-			means_z0 = first_point_mu.repeat(n_traj_samples, 1, 1)
-			sigma_z0 = first_point_std.repeat(n_traj_samples, 1, 1)
-			first_point_enc = utils.sample_standard_gaussian(means_z0, sigma_z0)
 
 		else:
 			raise Exception("Unknown encoder type {}".format(type(self.encoder_z0).__name__))

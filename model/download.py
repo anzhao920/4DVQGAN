@@ -5,8 +5,8 @@ from tqdm import tqdm
 import os
 import torch
 
-from .tats_vqgan import VQGAN
-from .tats_transformer import Net2NetTransformer
+from .vqgan_3d import VQGAN
+from .vqgan_4d import VQGAN_4D
 
 def get_confirm_token(response):
     for key, value in response.cookies.items():
@@ -59,7 +59,7 @@ def load_transformer(gpt_ckpt, vqgan_ckpt, stft_vqgan_ckpt='', device=torch.devi
     checkpoint['hyper_parameters']['args'].vqvae = vqgan_ckpt
     if stft_vqgan_ckpt:
         checkpoint['hyper_parameters']['args'].stft_vqvae = stft_vqgan_ckpt
-    gpt = Net2NetTransformer._load_model_state(checkpoint)
+    gpt = VQGAN_4D._load_model_state(checkpoint)
     gpt.eval()
 
     return gpt
