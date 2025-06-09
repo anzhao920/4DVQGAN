@@ -4,7 +4,7 @@ import os
 import argparse
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
-from model.vqgan_3d import VQGAN, VideoData
+from model.vqgan_3d import VQGAN, IPFData
 from model.modules.callbacks import ImageLogger, VideoLogger
 from pytorch_lightning import loggers as pl_loggers
 def main():
@@ -13,7 +13,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser = pl.Trainer.add_argparse_args(parser)
     parser = VQGAN.add_model_specific_args(parser)
-    parser = VideoData.add_data_specific_args(parser)
+    parser = IPFData.add_data_specific_args(parser)
     args = parser.parse_args()
     args.CT_scans = True
     args.gpus = 1
@@ -46,7 +46,7 @@ def main():
     args.external_img_path = 'CTscans' 
     args.external_mask_path = 'Lungmasks'
     args.external_label_path = 'MortalityDataSouthampton.csv'
-    data = VideoData(args)
+    data = IPFData(args)
     args.arch = '3D-VQGAN'
     # pre-make relevant cached files if necessary
     data.train_dataloader()

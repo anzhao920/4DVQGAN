@@ -4,7 +4,7 @@ import os
 import argparse
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint,GPUStatsMonitor
-from model import VQGAN_4D, VideoData
+from model import VQGAN_4D, IPFData
 import numpy as np
 
 def main():
@@ -14,7 +14,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser = pl.Trainer.add_argparse_args(parser)
     parser = VQGAN_4D.add_model_specific_args(parser)
-    parser = VideoData.add_data_specific_args(parser)
+    parser = IPFData.add_data_specific_args(parser)
     args = parser.parse_args()
     args.random_seed = 1234
     pl.seed_everything(args.random_seed)
@@ -77,7 +77,7 @@ def main():
     args.downsample_latent = False
     args.flowmap = True
     args.run_backwards = True
-    data = VideoData(args)
+    data = IPFData(args)
     # pre-make relevant cached files if necessary
     data.train_dataloader()
     data.test_dataloader()
