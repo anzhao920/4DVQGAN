@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributed as dist
 
-from .modules.utils import shift_dim, adopt_weight, comp_getattr
+from .modules.utils import shift_dim, adopt_weight
 from .modules import LPIPS, Codebook
 
 def silu(x):
