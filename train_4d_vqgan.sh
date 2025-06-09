@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# Training configuration
+python train_4d_vqgan.py \
+    --gpus 1 \
+    --batch_size 1 \
+    --accumulate_grad_batches 6 \
+    --max_steps 50000 \
+    --log_every_n_steps 5 \
+    --random_seed 1234 \
+    --vqvae "./experiment15/lightning_logs/version_0/checkpoints/epoch=195-step=17999-train/recon_loss=0.11.ckpt" \
+    --unconditional True \
+    --longitudinal_CT_scans True \
+    --default_root_dir "./4dvqgan_experiment" \
+    --base_lr 2e-04 \
+    --vocab_size 256 \
+    --first_stage_vocab_size 256 \
+    --block_size 1537 \
+    --n_layer 3 \
+    --n_head 8 \
+    --n_embd 1024 \
+    --first_stage_key "longitudianl_CT_scans" \
+    --batch_size_ode 1536 \
+    --scale 1 \
+    --embedding_dim 16 \
+    --optimizer "Adam" \
+    --latents 100 \
+    --gen_layers 3 \
+    --units 64 \
+    --rec_dims 100 \
+    --rec_layers 3 \
+    --gru_units 64 \
+    --n_layers 3 \
+    --n_downs 0 \
+    --resolution 256 \
+    --sequence_length 96 \
+    --num_workers 0 \
+    --data_root "./Leuven/" \
+    --img_path "Leuven_IPF_registered" \
+    --mask_path "Leuven_IPF_registered_mask" \
+    --label_path "Leuven_data_label.csv" \
+    --external_data_root "./Leuven/" \
+    --external_img_path "Leuven_IPF_registered" \
+    --external_mask_path "Leuven_IPF_registered_mask" \
+    --external_label_path "Leuven_data_label.csv" \
+    --max_longitudinal_CT 10 \
+    --mode "generation" \
+    --classification False \
+    --residual True \
+    --ode_rnn False \
+    --time_window_max 2191.5 \
+    --timepoints 13 \
+    --downsample_latent False \
+    --flowmap True \
+    --run_backwards True 

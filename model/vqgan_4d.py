@@ -22,6 +22,11 @@ def disabled_train(self, mode=True):
     does not change anymore."""
     return self
 
+def load_vqgan(vqgan_ckpt, device=torch.device('cpu')):
+    vqgan = VQGAN.load_from_checkpoint(vqgan_ckpt).to(device)
+    vqgan.eval()
+
+    return vqgan
 
 class VQGAN_4D(pl.LightningModule):
     def __init__(self,
@@ -83,7 +88,6 @@ class VQGAN_4D(pl.LightningModule):
         print(f"Restored from {path}")
 
     def init_first_stage_from_ckpt(self, args):
-        from .download import load_vqgan
         if not args.vtokens:
             self.first_stage_model = load_vqgan(args.vqvae)
             for p in self.first_stage_model.parameters():
@@ -97,7 +101,6 @@ class VQGAN_4D(pl.LightningModule):
             self.first_stage_vocab_size = 16384
  
     def init_cond_stage_from_ckpt(self, args):
-        from .download import load_vqgan
         if self.cond_stage_key=='label' and not self.be_unconditional:
             model = Labelator(n_classes=args.class_cond_dim)
             model = model.eval()
