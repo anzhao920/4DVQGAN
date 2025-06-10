@@ -37,7 +37,7 @@ class VidODE(nn.Module):
         self.args.n_downs = args.n_downs
         # self.args.run_backwards = False
         self.args.dec_diff = 'dopri5'
-        self.args.flowmap = args.flowmap
+        self.args.residual = args.residual
         self.args.ode_rnn = args.ode_rnn 
         # self.args.ode_n_unit = args.ode_n_unit
         # self.args.adjoint = args.adjoint
@@ -127,21 +127,12 @@ class VidODE(nn.Module):
         
         ##### Conv Decoder
         # self.combination_layers = CombineLatentEmbeddings(channels=self.input_dim).to(self.device)
-        if not self.args.flowmap :
+        if not self.args.residual :
             self.decoder = Decoder(input_dim=base_dim, output_dim=self.input_dim, n_ups=self.args.n_downs).to(self.device)
-            if self.args.classification :
-                self.classifier = nn.Conv3d(self.input_dim, self.args.vocab_size, 3, 1, 1)
                 
         else:
             self.decoder = Decoder(input_dim=base_dim*2, output_dim=self.input_dim*2 + 3, n_ups=self.args.n_downs).to(self.device)
-            if self.args.classification :
-                self.classifier = nn.Conv3d(self.input_dim, self.args.vocab_size, 3, 1, 1)
-
-    def test_gpu(self,loc):
-        print(torch.cuda.get_device_name(0))
-        print('Memory Usage at loc:',loc)
-        print('Allocated:', round(torch.cuda.memory_allocated(0)/1024**3,1), 'GB')
-        print('Cached:   ', round(torch.cuda.memory_reserved(0)/1024**3,1), 'GB')             
+            
     def get_reconstruction(self, time_steps_to_predict, truth, truth_time_steps, mask=None, out_mask=None):
         
         truth = truth.to(self.device)
@@ -181,7 +172,7 @@ class VidODE(nn.Module):
         ##### ODE decoding
         first_point_enc = first_point_enc.squeeze(0)
         sol_y_all = self.diffeq_solver(first_point_enc, time_steps_to_predict)
-        if not self.args.flowmap :
+        if not self.args.residual :
             b1, t1, c1, d1, h1, w1  = sol_y_all.shape
             # if self.args.downsample_latent:
             #     pred_x_all = self.decoder(sol_y_all.view(b1 * t1, c1, d1, h1, w1)).view(b1, t1, -1, d1*resize, h1*resize, w1*resize)
@@ -307,42 +298,7 @@ class VidODE(nn.Module):
             # pred_x = pred_x.view(b, -1, c, d, h, w)
         # truth[0,]
         return pred_x,index_selected,true_intermediates_new.detach(),pred_intermediates_new
-        # else:
-        #     # not ready yet
-        #     ##### Conv decoding
-        #     sol_y_all = sol_y_all.contiguous().view(b, pred_t_len, -1, d//resize, h // resize, w // resize)
-        #     # regular b, t, 6, h, w / irregular b, t * ratio, 6, h, w
-        #     pred_outputs = self.get_flowmaps(sol_out=sol_y_all, first_prev_embed=skip_conn_embed, mask=out_mask) # b, t, 6, h, w
-        #     pred_outputs = torch.cat(pred_outputs, dim=1)
-        #     pred_flows, pred_intermediates, pred_masks = \
-        #         pred_outputs[:, :, :2, ...], pred_outputs[:, :, 2:2+self.input_dim, ...], torch.sigmoid(pred_outputs[:, :, 2+self.input_dim:, ...])
 
-        #     ### Warping first frame by using argsical flow
-        #     # Declare grid for warping
-        #     grid_x = torch.linspace(-1.0, 1.0, w).view(1, 1, w, 1).expand(b, h, -1, -1)
-        #     grid_y = torch.linspace(-1.0, 1.0, h).view(1, h, 1, 1).expand(b, -1, w, -1)
-        #     grid = torch.cat([grid_x, grid_y], 3).float().to(self.device)  # [b, h, w, 2]
-
-        #     # Warping
-        #     last_frame = truth[:, -1, ...] if self.args.extrap else truth[:, 0, ...]
-        #     warped_pred_x = self.get_warped_images(pred_flows=pred_flows, start_image=last_frame, grid=grid)
-        #     warped_pred_x = torch.cat(warped_pred_x, dim=1)  # regular b, t, 6, h, w / irregular b, t * ratio, 6, h, w
-
-        #     pred_x = pred_masks * warped_pred_x + (1 - pred_masks) * pred_intermediates
-            
-        #     pred_x = pred_x.view(b, -1, c, h, w)
-            
-        #     ### extra information
-        #     # extra_info = {}
-            
-        #     # extra_info["argsical_flow"] = pred_flows
-        #     # extra_info["warped_pred_x"] = warped_pred_x
-        #     # extra_info["pred_intermediates"] = pred_intermediates
-        #     # extra_info["pred_masks"] = pred_masks
-
-            
-        #     # # extra_info = {}
-            # return pred_x, pred_x_all
     
     def get_mse(self, truth, pred_x, mask=None):
     

@@ -51,5 +51,4 @@ python train_4d_vqgan.py \
     --time_window_max 2191.5 \
     --timepoints 13 \
     --downsample_latent False \
-    --flowmap True \
     --run_backwards True 
