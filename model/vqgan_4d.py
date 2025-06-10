@@ -13,7 +13,7 @@ import os
 import nibabel as nib
 import numpy as np
 from itertools import chain
-from .modules.conv_odegru import VidODE
+from .modules.conv_odegru import Latent_embedding_ODE
 from torchmetrics.image import PeakSignalNoiseRatio
 from pytorch_msssim import ssim, ms_ssim, SSIM, MS_SSIM
 
@@ -56,7 +56,7 @@ class VQGAN_4D(pl.LightningModule):
         self.batch_size_ode = args.batch_size_ode
         self.timepoints = args.timepoints
         temp_device = torch.device('cuda')
-        self.latentODE_model = VidODE(args, args.embedding_dim, temp_device)
+        self.latentODE_model = Latent_embedding_ODE(args, args.embedding_dim, temp_device)
         
         self.output_head = nn.Sequential(
 		   nn.Linear(16, int(args.embedding_dim*2)),

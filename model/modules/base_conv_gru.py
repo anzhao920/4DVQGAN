@@ -27,7 +27,6 @@ class ConvGRUCell(nn.Module):
     """
     
     def __init__(self, 
-                 input_size: Tuple[int, int, int], 
                  input_dim: int, 
                  hidden_dim: int, 
                  kernel_size: Tuple[int, int, int], 
@@ -37,7 +36,6 @@ class ConvGRUCell(nn.Module):
         Initialize ConvGRU Cell.
         
         Args:
-            input_size: Dimensions of input tensor as (depth, height, width)
             input_dim: Number of channels in input tensor
             hidden_dim: Number of channels in hidden state
             kernel_size: Size of the convolutional kernel
@@ -45,7 +43,7 @@ class ConvGRUCell(nn.Module):
             dtype: Data type for tensors (cuda or cpu)
         """
         super(ConvGRUCell, self).__init__()
-        self.depth, self.height, self.width = input_size
+        # self.depth, self.height, self.width = input_size
         self.padding = tuple(k // 2 for k in kernel_size)
         self.hidden_dim = hidden_dim
         self.bias = bias
@@ -79,17 +77,6 @@ class ConvGRUCell(nn.Module):
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
     
-    def init_hidden(self, batch_size: int) -> torch.Tensor:
-        """
-        Initialize hidden state.
-        
-        Args:
-            batch_size: Batch size for initialization
-            
-        Returns:
-            Zero-initialized hidden state tensor
-        """
-        return torch.zeros(batch_size, self.hidden_dim, self.depth, self.height, self.width).type(self.dtype)
     
     def forward(self, 
                 input_tensor: torch.Tensor, 
@@ -143,14 +130,13 @@ class Encoder_z0_ODE_ConvGRU(nn.Module):
     This encoder uses a ConvGRU to process spatial information and an ODE solver for temporal modeling.
     """
     
-    def __init__(self, input_size, input_dim, hidden_dim, kernel_size, num_layers, dtype, 
+    def __init__(self, input_dim, hidden_dim, kernel_size, num_layers, dtype, 
                  batch_first=False, bias=True, return_all_layers=False, 
                  z0_diffeq_solver=None, run_backwards=None, ode_rnn=False):
         """
         Initialize the ODE-ConvGRU encoder.
         
         Args:
-            input_size: Dimensions of input tensor
             input_dim: Number of input channels
             hidden_dim: Number of hidden channels (can be list for multiple layers)
             kernel_size: Size of convolutional kernels
@@ -173,7 +159,7 @@ class Encoder_z0_ODE_ConvGRU(nn.Module):
             raise ValueError('Inconsistent list length for kernel_size and hidden_dim')
         
         # Store parameters
-        self.depth, self.height, self.width = input_size
+        # self.depth, self.height, self.width = input_size
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.kernel_size = kernel_size
@@ -192,7 +178,7 @@ class Encoder_z0_ODE_ConvGRU(nn.Module):
         # Create ConvGRU cells
         self.cell_list = nn.ModuleList([
             ConvGRUCell(
-                input_size=(self.depth, self.height, self.width),
+                # input_size=(self.depth, self.height, self.width),
                 input_dim=input_dim if i == 0 else hidden_dim[i - 1],
                 hidden_dim=hidden_dim[i],
                 kernel_size=kernel_size[i],
@@ -323,12 +309,6 @@ class Encoder_z0_ODE_ConvGRU(nn.Module):
         
         yi_allbatch = torch.cat(yi_allbatch, 0)
         return yi_allbatch, latent_ys
-    
-    def _init_hidden(self, batch_size):
-        init_states = []
-        for i in range(self.num_layers):
-            init_states.append(self.cell_list[i].init_hidden(batch_size))
-        return init_states
     
     @staticmethod
     def _check_kernel_size_consistency(kernel_size):
