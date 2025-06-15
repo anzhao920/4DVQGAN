@@ -7,7 +7,7 @@ python train_vqgan.py \
     --embedding_dim 16 \
     --n_codes 64 \
     --n_hiddens 32 \
-    --downsample 4,4,4 \
+    --downsample 4 4 4 \
     --batch_size 1 \
     --accumulate_grad_batches 6 \
     --progress_bar_refresh_rate 500 \
@@ -25,12 +25,12 @@ python train_vqgan.py \
     --image_channels 1 \
     --default_root_dir ./experiment \
     --num_workers 0 \
-    --data_root "./Leuven/" \
+    --data_root "C:\\My Data\\Leuven\\" \
     --img_path "Leuven_IPF_registered" \
     --mask_path "Leuven_IPF_registered_mask" \
     --label_path "Leuven_data_label.csv" \
-    --external_data_root "./SouthamptonExternalData/" \
+    --external_data_root "C:\\Users\\An\\OneDrive - University College London\\SouthamptonExternalData" \
     --external_img_path "CTscans" \
     --external_mask_path "Lungmasks" \
     --external_label_path "MortalityDataSouthampton.csv" \
-    --CT_scans True 
+    --CT_scans
