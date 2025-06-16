@@ -189,7 +189,6 @@ class IPFData(pl.LightningDataModule):
         parser = argparse.ArgumentParser(parents=[parent_parser], add_help=False)
         
         # Data paths
-        parser.add_argument('--data_path', type=str, default='/datasets01/Kinetics400_Frames/videos')
         parser.add_argument('--data_root', type=str, default="../DnR-master/", help="path to data root")
         parser.add_argument('--img_path', type=str, default="scans_512x512_MyData", help="path to ct data")
         parser.add_argument('--mask_path', type=str, default="LungMasks", help="path to mask")
@@ -204,7 +203,6 @@ class IPFData(pl.LightningDataModule):
         parser.add_argument('--random_seed', type=int, default=1234)
         
         # Data type flags
-        parser.add_argument('--image_folder', action='store_true')
         parser.add_argument('--CT_scans', action='store_true')
         parser.add_argument('--longitudinal_CT_scans', action='store_true')
         parser.add_argument('--mode', type=str, default='interpolation')

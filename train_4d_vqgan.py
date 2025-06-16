@@ -111,8 +111,9 @@ def main():
     kwargs = dict()
     if args.gpus > 1:
         kwargs = dict(
-            gpus=args.gpus,
-            plugins=[pl.plugins.DDPPlugin(find_unused_parameters=False)]
+            accelerator='gpu',
+            devices=args.gpus,
+            strategy='ddp'
         )
     
     # Adjust learning rate

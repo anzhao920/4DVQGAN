@@ -73,11 +73,11 @@ class VQGAN(pl.LightningModule):
         self.save_hyperparameters()
 
     @property
-    def latent_shape(self):
-        input_shape = (self.args.sequence_length//self.args.sample_every_n_frames, self.args.resolution,
-                       self.args.resolution)
-        return tuple([s // d for s, d in zip(input_shape,
-                                             self.args.downsample)])
+    # def latent_shape(self):
+    #     input_shape = (self.args.sequence_length//self.args.sample_every_n_frames, self.args.resolution,
+    #                    self.args.resolution)
+    #     return tuple([s // d for s, d in zip(input_shape,
+    #                                          self.args.downsample)])
 
     def encode(self, x, include_embeddings=False):
         h = self.pre_vq_conv(self.encoder(x))

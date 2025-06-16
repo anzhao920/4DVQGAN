@@ -13,12 +13,7 @@ python train_4d_vqgan.py \
     --longitudinal_CT_scans True \
     --default_root_dir "./4dvqgan_experiment" \
     --base_lr 2e-04 \
-    --vocab_size 256 \
     --first_stage_vocab_size 256 \
-    --block_size 1537 \
-    --n_layer 3 \
-    --n_head 8 \
-    --n_embd 1024 \
     --first_stage_key "longitudianl_CT_scans" \
     --batch_size_ode 1536 \
     --scale 1 \
@@ -48,7 +43,7 @@ python train_4d_vqgan.py \
     --classification False \
     --residual True \
     --ode_rnn False \
-    --time_window_max 2191.5 \
     --timepoints 13 \
+    --time_window_max 2191.5 \
     --downsample_latent False \
     --run_backwards True 
