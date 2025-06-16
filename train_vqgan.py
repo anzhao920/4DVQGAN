@@ -7,7 +7,8 @@ import os
 import argparse
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
-from model.vqgan_3d import VQGAN, IPFData
+from model.vqgan_3d import VQGAN
+from model.data import IPFData
 from model.modules.callbacks import ImageLogger, VideoLogger
 from pytorch_lightning import loggers as pl_loggers
 
@@ -106,6 +107,11 @@ def main():
 
     # Start training
     trainer.fit(model, data)
+
+    # test the trained model
+    # model = VQGAN.load_from_checkpoint("./experiment6/lightning_logs/version_0/checkpoints/latest_checkpoint-v1.ckpt")
+    # model.eval()
+    # predictions = trainer.validate(model, data)
 
 if __name__ == '__main__':
     main()

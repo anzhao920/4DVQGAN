@@ -193,7 +193,13 @@ class IPFData(pl.LightningDataModule):
         parser.add_argument('--img_path', type=str, default="scans_512x512_MyData", help="path to ct data")
         parser.add_argument('--mask_path', type=str, default="LungMasks", help="path to mask")
         parser.add_argument('--label_path', type=str, default="MortalityData.csv", help="path to survival label")
-        
+        parser.add_argument('--image_channels', type=int, default=1, help='Number of channels in input images (e.g., 1 for grayscale, 3 for RGB)')
+        parser.add_argument('--external_data_root', type=str, default=None, help='Root path to external dataset')
+        parser.add_argument('--external_img_path', type=str, default=None, help='Subfolder name for external images')
+        parser.add_argument('--external_mask_path', type=str, default=None, help='Subfolder name for external masks')
+        parser.add_argument('--external_label_path', type=str, default=None, help='CSV file with labels for external data')
+
+
         # Data parameters
         parser.add_argument('--sequence_length', type=int, default=16)
         parser.add_argument('--resolution', type=int, default=64)
@@ -522,7 +528,7 @@ class IPFCTDataset(data.Dataset):
         
         output_mask = mask_transformed
         img_transformed = img_transformed - 0.5
-
+        # import pdb;pdb.set_trace()
         return img_transformed, output_mask, Dead, followUpTime
              
 
