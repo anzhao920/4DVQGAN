@@ -73,7 +73,7 @@ class LPIPS(nn.Module):
 
     @classmethod
     def from_pretrained(cls, name="vgg_lpips"):
-        if name is not "vgg_lpips":
+        if name != "vgg_lpips":
             raise NotImplementedError
         model = cls()
         ckpt = get_ckpt_path(name, os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache"))

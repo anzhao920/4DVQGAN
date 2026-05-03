@@ -8,6 +8,7 @@ import pytorch_lightning as pl
 
 from .modules.utils import shift_dim, accuracy
 from .modules.encoders import Labelator, SOSProvider, Identity
+from .vqgan_3d import VQGAN
 from einops import rearrange,repeat
 import os
 import nibabel as nib
@@ -17,6 +18,16 @@ from .modules.conv_odegru import Latent_embedding_ODE
 from torchmetrics.image import PeakSignalNoiseRatio
 from pytorch_msssim import ssim, ms_ssim, SSIM, MS_SSIM
 from typing import Dict, List, Tuple, Optional
+
+def str2bool(value):
+    if isinstance(value, bool):
+        return value
+    value = value.lower()
+    if value in ("yes", "true", "t", "1", "y"):
+        return True
+    if value in ("no", "false", "f", "0", "n"):
+        return False
+    raise argparse.ArgumentTypeError(f"Boolean value expected, got {value!r}")
 
 def disabled_train(self, mode=True):
     """Overwrite model.train with this function to make sure train/eval mode
@@ -34,8 +45,8 @@ class VQGAN_4D(pl.LightningModule):
                  args,
                  ckpt_path=None,
                  ignore_keys=[],
-                 first_stage_key="video",
-                 cond_stage_key="label",
+                 first_stage_key="longitudianl_CT_scans",
+                 cond_stage_key="longitudianl_CT_scans",
                  pkeep=1.0,
                  sos_token=0,
                  ):
@@ -56,7 +67,7 @@ class VQGAN_4D(pl.LightningModule):
         self.scale = args.scale
         self.batch_size_ode = args.batch_size_ode
         self.timepoints = args.timepoints
-        temp_device = torch.device('cuda')
+        temp_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.latentODE_model = Latent_embedding_ODE(args, args.embedding_dim, temp_device)
         
         self.output_head = nn.Sequential(
@@ -102,7 +113,14 @@ class VQGAN_4D(pl.LightningModule):
             self.first_stage_vocab_size = 16384
  
     def init_cond_stage_from_ckpt(self, args):
-        if self.cond_stage_key=='label' and not self.be_unconditional:
+        if self.be_unconditional:
+            print(f"Using no cond stage. Assuming the training is intended to be unconditional. "
+                  f"Prepending {self.sos_token} as a sos token.")
+            self.be_unconditional = True
+            self.cond_stage_key = self.first_stage_key
+            self.cond_stage_model = SOSProvider(self.sos_token)
+            self.cond_stage_vocab_size = 0
+        elif self.cond_stage_key=='label':
             model = Labelator(n_classes=args.class_cond_dim)
             model = model.eval()
             model.train = disabled_train
@@ -119,15 +137,11 @@ class VQGAN_4D(pl.LightningModule):
         elif self.cond_stage_key=='text':
             self.cond_stage_model = Identity()
             self.cond_stage_vocab_size = 49408
-        elif self.be_unconditional:
-            print(f"Using no cond stage. Assuming the training is intended to be unconditional. "
-                  f"Prepending {self.sos_token} as a sos token.")
-            self.be_unconditional = True
-            self.cond_stage_key = self.first_stage_key
-            self.cond_stage_model = SOSProvider(self.sos_token)
+        elif self.cond_stage_key==self.first_stage_key:
+            self.cond_stage_model = Identity()
             self.cond_stage_vocab_size = 0
         else:
-            ValueError('conditional model %s is not implementated'%self.cond_stage_key)
+            raise ValueError('conditional model %s is not implementated'%self.cond_stage_key)
 
     def visualize_predictions(self,
                              predicted_indices: torch.Tensor,
@@ -471,7 +485,7 @@ class VQGAN_4D(pl.LightningModule):
                 observed_data[b,:,:,~(latent_mask[b,0,:].bool())] = 0
                 data_to_predict[b,:,:,~(latent_mask[b,0,:].bool())] = 0
 
-        elif self.mode == 'extrapolation':
+        elif self.mode in ('extrapolation', 'generation'):
             mask_predicted_data = observed_mask.clone()
             for b in range(observed_time_mask.shape[0]):
                 observed_data[b, observed_mask.squeeze(-1).bool()[b,:], :] = vq_embeddings[b, observed_time_mask[b,:].bool(), :]
@@ -757,24 +771,34 @@ class VQGAN_4D(pl.LightningModule):
     def add_model_specific_args(parent_parser):
         parser = argparse.ArgumentParser(parents=[parent_parser], add_help=False)
         parser.add_argument('--vqvae', type=str, help='path to vqvae ckpt, or model name to download pretrained')
-        parser.add_argument('--unconditional', action='store_true')
+        parser.add_argument('--stft_vqvae', type=str, default=None, help='path to stft vqvae checkpoint')
+        parser.add_argument('--unconditional', nargs='?', const=True, default=False, type=str2bool)
+        parser.add_argument('--vtokens', nargs='?', const=True, default=False, type=str2bool)
         parser.add_argument('--base_lr', type=float, default=4.5e-06)
-        parser.add_argument('--classification', action='store_true', default=False)
+        parser.add_argument('--embedding_dim', type=int, default=256)
+        parser.add_argument('--optimizer', type=str, default='Adam', choices=['Adam', 'AdamW', 'SAM'])
+        parser.add_argument('--classification', nargs='?', const=True, default=False, type=str2bool)
+        parser.add_argument('--class_cond_dim', type=int, default=None)
         parser.add_argument('--first_stage_vocab_size', type=int, default=16384)
-        parser.add_argument('--first_stage_key', type=str, default='video', choices=['video'])
-        parser.add_argument('--cond_stage_key', type=str, default='label', choices=['label', 'text', 'stft'])
+        parser.add_argument('--first_stage_key', type=str, default='longitudianl_CT_scans',
+                            choices=['video', 'longitudianl_CT_scans'])
+        parser.add_argument('--cond_stage_key', type=str, default='longitudianl_CT_scans',
+                            choices=['label', 'text', 'stft', 'video', 'longitudianl_CT_scans'])
         # latent ode hyperparameters
         parser.add_argument('-l', '--latents', type=int, default=6, help="Size of the latent state")
-        parser.add_argument('--rec-dims', type=int, default=20, help="Dimensionality of the recognition model (ODE or RNN).")
-        parser.add_argument('--rec-layers', type=int, default=1, help="Number of layers in ODE func in recognition ODE")
-        parser.add_argument('--gen-layers', type=int, default=1, help="Number of layers in ODE func in generative ODE")
+        parser.add_argument('--rec-dims', '--rec_dims', dest='rec_dims', type=int, default=20, help="Dimensionality of the recognition model (ODE or RNN).")
+        parser.add_argument('--rec-layers', '--rec_layers', dest='rec_layers', type=int, default=1, help="Number of layers in ODE func in recognition ODE")
+        parser.add_argument('--gen-layers', '--gen_layers', dest='gen_layers', type=int, default=1, help="Number of layers in ODE func in generative ODE")
         parser.add_argument('--n_layers', type=int, default=3, help='A number of layer of vid ODE func')
         parser.add_argument('--n_downs', type=int, default=2)
         parser.add_argument('-u', '--units', type=int, default=100, help="Number of units per layer in ODE func")
-        parser.add_argument('-g', '--gru-units', type=int, default=100, help="Number of units per layer in each of GRU update networks")
+        parser.add_argument('-g', '--gru-units', '--gru_units', dest='gru_units', type=int, default=100, help="Number of units per layer in each of GRU update networks")
         parser.add_argument('-t', '--timepoints', type=int, default=100, help="Total number of time-points")
         parser.add_argument('--batch_size_ode', type=int, default=64)
         parser.add_argument('--scale', type=int, default=4)
+        parser.add_argument('--residual', nargs='?', const=True, default=False, type=str2bool)
+        parser.add_argument('--ode_rnn', nargs='?', const=True, default=False, type=str2bool)
+        parser.add_argument('--downsample_latent', nargs='?', const=True, default=False, type=str2bool)
+        parser.add_argument('--run_backwards', nargs='?', const=True, default=False, type=str2bool)
         
         return parser
-

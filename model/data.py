@@ -28,6 +28,16 @@ import nibabel as nib
 from sklearn.model_selection import KFold
 from PIL import Image
 
+def str2bool(value):
+    if isinstance(value, bool):
+        return value
+    value = value.lower()
+    if value in ("yes", "true", "t", "1", "y"):
+        return True
+    if value in ("no", "false", "f", "0", "n"):
+        return False
+    raise argparse.ArgumentTypeError(f"Boolean value expected, got {value!r}")
+
 class IPFData(pl.LightningDataModule):
     """
     PyTorch Lightning DataModule for handling IPF CT scan data.
@@ -156,7 +166,7 @@ class IPFData(pl.LightningDataModule):
             num_workers=self.args.num_workers,
             pin_memory=True,
             sampler=sampler,
-            shuffle=True if train else False
+            shuffle=(sampler is None and train)
         )
 
     def train_dataloader(self):
@@ -207,10 +217,11 @@ class IPFData(pl.LightningDataModule):
         parser.add_argument('--num_workers', type=int, default=8)
         parser.add_argument('--max_longitudinal_CT', type=int, default=4)
         parser.add_argument('--random_seed', type=int, default=1234)
+        parser.add_argument('--time_window_max', type=float, default=float('inf'))
         
         # Data type flags
-        parser.add_argument('--CT_scans', action='store_true')
-        parser.add_argument('--longitudinal_CT_scans', action='store_true')
+        parser.add_argument('--CT_scans', nargs='?', const=True, default=False, type=str2bool)
+        parser.add_argument('--longitudinal_CT_scans', nargs='?', const=True, default=False, type=str2bool)
         parser.add_argument('--mode', type=str, default='interpolation')
         
         return parser
@@ -251,7 +262,7 @@ class IPFLongitudinalCTDataset(data.Dataset):
                 patient_img_path_list = np.unique(patient_observed_time_points)
                 if len(patient_img_path_list) > 2:
                     self.patient_IDs.append(patient)
-        elif self.mode == 'extrapolation':
+        elif self.mode in ('extrapolation', 'generation'):
             for patient in patients:
                 patient_img_path_list = self.labels[self.labels.patient_id == patient]['image_path'].to_numpy()
                 patient_observed_time_points = round(self.labels[self.labels.patient_id == patient]['time_from_baseline']/182.5).to_numpy()

@@ -7,7 +7,11 @@ which includes transformer-based temporal modeling.
 import os
 import argparse
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint, GPUStatsMonitor
+from pytorch_lightning.callbacks import ModelCheckpoint
+try:
+    from pytorch_lightning.callbacks import DeviceStatsMonitor
+except ImportError:
+    from pytorch_lightning.callbacks import GPUStatsMonitor as DeviceStatsMonitor
 from model import VQGAN_4D, IPFData
 import numpy as np
 
@@ -23,7 +27,7 @@ def setup_callbacks(args):
     """
     callbacks = [
         # Monitor GPU usage
-        GPUStatsMonitor(),
+        DeviceStatsMonitor(),
         
         # Save checkpoints every 1000 steps
         ModelCheckpoint(
@@ -133,4 +137,4 @@ def main():
     trainer.fit(model, data)
 
 if __name__ == '__main__':
-    main() 
+    main()

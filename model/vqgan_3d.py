@@ -72,7 +72,6 @@ class VQGAN(pl.LightningModule):
         self.l1_weight = args.l1_weight
         self.save_hyperparameters()
 
-    @property
     # def latent_shape(self):
     #     input_shape = (self.args.sequence_length//self.args.sample_every_n_frames, self.args.resolution,
     #                    self.args.resolution)
@@ -100,7 +99,7 @@ class VQGAN(pl.LightningModule):
 
         recon_loss = F.l1_loss(x_recon, x) * self.l1_weight
 
-        frame_idx = torch.randint(0, T, [B]).cuda()
+        frame_idx = torch.randint(0, T, [B], device=x.device)
         frame_idx_selected = frame_idx.reshape(-1, 1, 1, 1, 1).repeat(1, C, 1, H, W)
         frames = torch.gather(x, 2, frame_idx_selected).squeeze(2)
         frames_recon = torch.gather(x_recon, 2, frame_idx_selected).squeeze(2)
@@ -526,4 +525,3 @@ class NLayerDiscriminator3D(nn.Module):
             return res[-1], res[1:]
         else:
             return self.model(input), _
-

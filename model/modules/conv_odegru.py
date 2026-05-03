@@ -239,6 +239,7 @@ class Latent_embedding_ODE(nn.Module):
             # Generate predictions using residual approach
             pred_x = torch.zeros_like(pred_intermediates)
             pred_x = pred_x[0:b, index_selected, :]
+            last_frame = skip_conn_embed
             
             # Accumulate flowmaps to generate predictions
             for i in range(0, pred_x.shape[1]):
